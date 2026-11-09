@@ -82,6 +82,7 @@ const isUs = b => /better\s*homes|betterhomes/i.test(b || '');
 
 // ---------- lowest similar listing on the market (other agencies) for each new team listing ----------
 const NEW_MS = 7 * 864e5;
+const COMPS = 8; // how many similar listings from other agencies to keep per new listing
 for (const x of listings) {
   if (!x.since || Date.now() - Date.parse(x.since) > NEW_MS || !x._type || !x._locs.length) continue;
   for (const loc of x._locs.slice(0, 2)) {
@@ -93,16 +94,21 @@ for (const x of listings) {
         .filter(p => !isUs((p.broker || {}).name) && p.price && p.price.value && !p.price.is_hidden)
         .filter(p => x._cat === 1 || (p.price.period || 'yearly') === 'yearly');
       if (L.length) {
-        const c = L.sort((a, b) => a.price.value - b.price.value)[0];
-        x.comp = {
+        // keep the cheapest few so people can open and compare them; comp stays the single cheapest (used by the TV slide)
+        x.comps = L.sort((a, b) => a.price.value - b.price.value).slice(0, COMPS).map(c => ({
           price: c.price.value,
           broker: (c.broker || {}).name || '',
           agent: (c.agent || {}).name || '',
           title: c.title || '',
           loc: (c.location || {}).name || '',
           size: c.size && c.size.value ? Math.round(c.size.unit === 'sqm' ? c.size.value * SQM : c.size.value) : null,
-          count: L.length
-        };
+          beds: /studio/i.test(String(c.bedrooms)) ? 0 : (c.bedrooms == null || c.bedrooms === '' ? null : parseInt(c.bedrooms, 10)),
+          baths: c.bathrooms == null || c.bathrooms === '' ? null : parseInt(c.bathrooms, 10),
+          url: c.share_url || (c.details_path ? 'https://www.propertyfinder.ae' + c.details_path : ''),
+          img: String(((c.images || [])[0] || {}).medium || ((c.images || [])[0] || {}).small || '').replace(/\?.*$/, ''),
+          since: c.listed_date || null
+        }));
+        x.comp = { ...x.comps[0], count: L.length };
         break;
       }
     } catch (e) { console.log('compare', x.ref, e.message); }

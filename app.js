@@ -34,6 +34,18 @@
     + '.card .cnt{position:absolute;right:10px;bottom:10px;background:rgba(0,0,0,.6);color:#fff;font-size:12px;padding:3px 8px;border-radius:10px}'
     + '.card .go{display:block;color:inherit;text-decoration:none;cursor:pointer}'
     + '.more{height:1px}'
+    + '.rv{margin-top:10px;border-top:1px solid var(--line);padding-top:8px}'
+    + '.rv h5{font-size:12px;color:#8fbaf5;font-weight:600;margin-bottom:4px}'
+    + '.rv a{display:grid;grid-template-columns:1fr auto;gap:1px 10px;padding:7px 0;color:var(--ink);text-decoration:none;border-bottom:1px solid var(--line)}'
+    + '.rv a:last-child{border-bottom:0}.rv a b{font-size:14px}.rv a span{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rv a em{font-style:normal;color:#8fbaf5;font-size:12px;text-align:right}'
+    + '.cl{display:grid;gap:10px;margin-top:12px}'
+    + '.cl a{display:grid;grid-template-columns:96px 1fr;gap:10px;align-items:center;padding:8px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.03);color:var(--ink);text-decoration:none}'
+    + '.cl a.low{border-color:#2b7de9}'
+    + '.cl img,.cl .noimg{width:96px;height:66px;border-radius:8px;object-fit:cover;background:#1c2d40;display:block}'
+    + '.cl b{display:block;font-size:16px}.cl b small{font-size:12px;color:var(--muted);font-weight:500}'
+    + '.cl .t{font-size:13px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'
+    + '.cl .m{font-size:12px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'
+    + '.cl .d{font-size:12px;font-weight:700;margin-top:3px}.cl .up{color:#3fd08a}.cl .dn{color:#ff8a6b}'
     + '.retry{display:block;margin:10px auto 0;padding:8px 16px;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--ink);font-size:14px}'
     + '.tg{display:inline-block;padding:3px 9px;border-radius:6px;font-size:12px;font-weight:700;margin-right:5px}'
     + '.Sale{background:var(--gold);color:#0b1622}.Rent{background:var(--rent);color:#fff}.New{background:var(--new);color:#fff}.Prem{background:#6d3fc0;color:#fff}.Feat{background:#fff;color:#0b1622}'
@@ -95,6 +107,9 @@
     }
     function priceTxt(x){ return x.por || !x.price ? 'Price on request' : aed(x.price) + (x.type === 'Sale' ? '' : ' <small>/ ' + (x.period || 'year') + '</small>'); }
     function bedTxt(x){ return x.beds === 0 ? 'Studio' : x.beds == null ? '' : x.beds + ' bed'; }
+    // similar listings from other agencies, cheapest first (older data only has the single cheapest in x.comp)
+    function rivals(x){ return x.comps && x.comps.length ? x.comps : x.comp ? [x.comp] : []; }
+    function link(u){ return u ? ' href="' + e(u) + '" target="_blank" rel="noopener"' : ''; }
     function parts(x){ var a = x.area || String(x.loc || '').split(' · ').pop(); return {area:a, bld:String(x.loc || '').split(' · ').filter(function(p){ return p && p !== a; }).join(' · ')}; }
     function render(){
       document.getElementById('pfilters').style.display = tab === 'list' ? '' : 'none';
@@ -136,8 +151,19 @@
         + '<div class="go" role="button" tabindex="0"><div class="body"><div class="area">' + e(p.area) + '</div>' + (p.bld ? '<div class="bld">' + e(p.bld) + '</div>' : '')
         + '<div class="ttl">' + e(x.title) + '</div><div class="price">' + priceTxt(x) + '</div>'
         + '<div class="specs">' + [bedTxt(x), x.baths != null ? x.baths + ' bath' : '', x.size ? n0(x.size) + ' sq ft' : '', e(x.ptype || '')].filter(Boolean).map(function(s){ return '<span>' + s + '</span>'; }).join('') + '</div>'
-        + (x.comp ? '<div class="specs" style="color:#8fbaf5">Lowest similar elsewhere: ' + aed(x.comp.price) + ' · ' + e(x.comp.broker) + ' · tap to compare</div>' : '')
+        + (x.comp && filt !== 'comp' ? '<div class="specs" style="color:#8fbaf5">Lowest similar elsewhere: ' + aed(x.comp.price) + ' · ' + e(x.comp.broker) + ' · tap to compare</div>' : '')
+        + (x.comp && filt === 'comp' ? rivalRows(x) : '')
         + '<div class="meta"><span>' + e(x.agent) + '</span><span>' + pub(x.since) + '</span></div></div></div></div>';
+    }
+    // on the Market check tab, show the cheapest rivals right on the card; each opens on Property Finder
+    function rivalRows(x){
+      var r = rivals(x), per = x.type === 'Sale' ? '' : ' /yr';
+      return '<div class="rv"><h5>Cheapest similar from other agencies' + (x.comp.count ? ' · ' + x.comp.count + ' found' : '') + '</h5>'
+        + r.slice(0, 3).map(function(c){
+            var what = [c.beds === 0 ? 'Studio' : c.beds != null ? c.beds + ' bed' : '', c.size ? n0(c.size) + ' sq ft' : '', c.broker].filter(Boolean).join(' · ');
+            return '<a class="rl"' + link(c.url) + '><b>' + aed(c.price) + per + '</b><em>' + (c.url ? 'View ›' : '') + '</em><span style="grid-column:1/3">' + e(what) + '</span></a>';
+          }).join('')
+        + (r.length > 3 ? '<h5 style="margin-top:6px">Tap the card to see all ' + r.length + '</h5>' : '') + '</div>';
     }
     function drawMore(){
       var list = document.getElementById('plist'); if (!list || drawn >= shown.length) return;
@@ -162,7 +188,19 @@
             + '<div class="r"><span>Cheapest similar</span><b>' + aed(c.price) + per + '</b></div>'
             + '<div class="r"><span>' + e(c.agent) + '</span><span>' + e(c.broker) + '</span></div>'
             + '<div class="r"><span>Our price</span><b>' + (ours ? aed(ours) + per : 'On request') + '</b></div>'
-            + '<p>' + (diff == null ? '' : diff > 0 ? 'We are ' + aed(diff) + ' above the lowest. ' : diff < 0 ? 'We are the lowest, ' + aed(-diff) + ' below the next. ' : 'Same as the lowest. ') + c.count + ' similar listings from other agencies.</p></div>' : '')
+            + '<p>' + (diff == null ? '' : diff > 0 ? 'We are ' + aed(diff) + ' above the lowest. ' : diff < 0 ? 'We are the lowest, ' + aed(-diff) + ' below the next. ' : 'Same as the lowest. ') + c.count + ' similar listings from other agencies.</p>'
+            + '<div class="cl">' + rivals(x).map(function(r, k){
+                var what = [r.beds === 0 ? 'Studio' : r.beds != null ? r.beds + ' bed' : '', r.baths != null ? r.baths + ' bath' : '', r.size ? n0(r.size) + ' sq ft' : ''].filter(Boolean).join(' · ');
+                var d = ours ? ours - r.price : null;
+                return '<a' + (k === 0 ? ' class="low"' : '') + link(r.url) + '>'
+                  + (r.img ? '<img loading="lazy" decoding="async" src="' + e(r.img) + '" alt="">' : '<div class="noimg"></div>')
+                  + '<div style="min-width:0"><b>' + aed(r.price) + (per ? ' <small>/ year</small>' : '') + '</b>'
+                  + (r.title ? '<div class="t">' + e(r.title) + '</div>' : '')
+                  + '<div class="m">' + e([what, r.loc].filter(Boolean).join(' · ')) + '</div>'
+                  + '<div class="m">' + e([r.broker, r.agent].filter(Boolean).join(' · ')) + '</div>'
+                  + (d ? '<div class="d ' + (d > 0 ? 'up' : 'dn') + '">' + (d > 0 ? aed(d) + ' cheaper than ours' : aed(-d) + ' more than ours') + '</div>' : '')
+                  + '</div></a>';
+              }).join('') + '</div></div>' : '')
         + (x.url ? '<a class="btn" href="' + e(x.url) + '" target="_blank" rel="noopener">View on Property Finder</a>' : '')
         + '</div>';
       sheet.classList.add('open'); sheet.scrollTop = 0; document.body.style.overflow = 'hidden';
@@ -177,6 +215,7 @@
     window.addEventListener('popstate', closeDetail);
     // tapping a card opens its details (with the market check); the details screen links on to Property Finder
     main.addEventListener('click', function(ev){
+      if (ev.target.closest('a[href]')) return; // rival rows open Property Finder directly
       var c = ev.target.closest('.card'); if (c) openDetail(c.getAttribute('data-ref'));
     });
     main.addEventListener('scroll', function(ev){
