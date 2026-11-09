@@ -32,7 +32,9 @@
     + '.card .strip::-webkit-scrollbar{display:none}'
     + '.card .strip img{flex:none;width:100%;aspect-ratio:16/10;object-fit:cover;scroll-snap-align:center;display:block}'
     + '.card .cnt{position:absolute;right:10px;bottom:10px;background:rgba(0,0,0,.6);color:#fff;font-size:12px;padding:3px 8px;border-radius:10px}'
-    + '.card a.go{display:block;color:inherit;text-decoration:none}'
+    + '.card .go{display:block;color:inherit;text-decoration:none;cursor:pointer}'
+    + '.more{height:1px}'
+    + '.retry{display:block;margin:10px auto 0;padding:8px 16px;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--ink);font-size:14px}'
     + '.tg{display:inline-block;padding:3px 9px;border-radius:6px;font-size:12px;font-weight:700;margin-right:5px}'
     + '.Sale{background:var(--gold);color:#0b1622}.Rent{background:var(--rent);color:#fff}.New{background:var(--new);color:#fff}.Prem{background:#6d3fc0;color:#fff}.Feat{background:#fff;color:#0b1622}'
     + '.card .tags{position:absolute;left:10px;top:10px;pointer-events:none}'
@@ -82,8 +84,10 @@
       + '<div class="chips" id="pchips"><button class="on" data-f="all">All</button><button data-f="new">New</button><button data-f="paid">Premium & featured</button><button data-f="sale">For sale</button><button data-f="rent">For rent</button><button data-f="comp">Market check</button></div></div></div>'
       + '<div id="pmain"></div><div class="sheet" id="psheet"></div>';
     document.body.appendChild(app);
-    var L = [], SOLD = [], tab = 'list', filt = 'all', q = '';
+    var L = [], SOLD = [], tab = 'list', filt = 'all', q = '', lastUpdated = null, shown = [], drawn = 0, BATCH = 15, io = null, sheetHist = false;
     var main = document.getElementById('pmain'), sheet = document.getElementById('psheet');
+    // phone cards use the smaller Property Finder image (about 1/3 the bytes) to keep memory low on mobile browsers
+    var sm = function(u){ return String(u).replace('/1312x894.', '/668x452.'); };
     function tags(x){
       return '<span class="tg ' + (x.type === 'Sale' ? 'Sale">For sale' : 'Rent">For rent') + '</span>'
         + (x.isNew ? '<span class="tg New">New</span>' : '')
@@ -94,6 +98,7 @@
     function parts(x){ var a = x.area || String(x.loc || '').split(' · ').pop(); return {area:a, bld:String(x.loc || '').split(' · ').filter(function(p){ return p && p !== a; }).join(' · ')}; }
     function render(){
       document.getElementById('pfilters').style.display = tab === 'list' ? '' : 'none';
+      if (io) { io.disconnect(); io = null; }
       if (tab === 'sold'){
         main.innerHTML = SOLD.length ? '<div class="sold">' + SOLD.map(function(a){
           return '<div class="a"><h3>' + e(a.area) + '</h3>' + a.items.map(function(t){
@@ -114,25 +119,40 @@
         if (ql && (x.loc + ' ' + x.area + ' ' + x.agent + ' ' + x.title + ' ' + x.ref).toLowerCase().indexOf(ql) < 0) return false;
         return true;
       });
-      main.innerHTML = items.length ? '<div class="list">' + items.map(function(x, i){
-        var p = parts(x);
-        var href = x.url ? ' href="' + e(x.url) + '" target="_blank" rel="noopener"' : '';
-        return '<div class="card" data-ref="' + e(x.ref) + '"><div class="ph"><div class="strip">' + x.imgs.map(function(u, k){ return '<img loading="' + (i < 3 || k === 0 ? 'eager' : 'lazy') + '" src="' + e(u) + '" alt="">'; }).join('') + '</div>'
-          + '<div class="tags">' + tags(x) + '</div>' + (x.imgs.length > 1 ? '<div class="cnt">1 / ' + x.imgs.length + '</div>' : '') + '</div>'
-          + '<a class="go"' + href + '><div class="body"><div class="area">' + e(p.area) + '</div>' + (p.bld ? '<div class="bld">' + e(p.bld) + '</div>' : '')
-          + '<div class="ttl">' + e(x.title) + '</div><div class="price">' + priceTxt(x) + '</div>'
-          + '<div class="specs">' + [bedTxt(x), x.baths != null ? x.baths + ' bath' : '', x.size ? n0(x.size) + ' sq ft' : '', e(x.ptype || '')].filter(Boolean).map(function(s){ return '<span>' + s + '</span>'; }).join('') + '</div>'
-          + (x.comp ? '<div class="specs" style="color:#8fbaf5">Lowest similar elsewhere: ' + aed(x.comp.price) + ' · ' + e(x.comp.broker) + '</div>' : '')
-          + '<div class="meta"><span>' + e(x.agent) + '</span><span>' + pub(x.since) + '</span></div></div></a></div>';
-      }).join('') + '</div>' : '<div class="empty">Nothing matches this filter.</div>';
+      shown = items; drawn = 0;
+      if (!items.length){ main.innerHTML = '<div class="empty">' + (L.length ? 'Nothing matches this filter.' : 'Loading…') + '</div>'; return; }
+      main.innerHTML = '<div class="list" id="plist"></div><div class="more" id="pmore"></div>';
+      drawMore();
+      // draw the rest in batches as the user scrolls, instead of putting every card and photo in the page at once
+      if ('IntersectionObserver' in window){
+        io = new IntersectionObserver(function(en){ if (en[0].isIntersecting) drawMore(); }, {rootMargin:'1200px 0px'});
+        io.observe(document.getElementById('pmore'));
+      } else { while (drawn < shown.length) drawMore(); }
+    }
+    function card(x, i){
+      var p = parts(x);
+      return '<div class="card" data-ref="' + e(x.ref) + '"><div class="ph"><div class="strip">' + x.imgs.map(function(u, k){ return '<img loading="' + (i < 2 && k === 0 ? 'eager' : 'lazy') + '" decoding="async" src="' + e(sm(u)) + '" alt="">'; }).join('') + '</div>'
+        + '<div class="tags">' + tags(x) + '</div>' + (x.imgs.length > 1 ? '<div class="cnt">1 / ' + x.imgs.length + '</div>' : '') + '</div>'
+        + '<div class="go" role="button" tabindex="0"><div class="body"><div class="area">' + e(p.area) + '</div>' + (p.bld ? '<div class="bld">' + e(p.bld) + '</div>' : '')
+        + '<div class="ttl">' + e(x.title) + '</div><div class="price">' + priceTxt(x) + '</div>'
+        + '<div class="specs">' + [bedTxt(x), x.baths != null ? x.baths + ' bath' : '', x.size ? n0(x.size) + ' sq ft' : '', e(x.ptype || '')].filter(Boolean).map(function(s){ return '<span>' + s + '</span>'; }).join('') + '</div>'
+        + (x.comp ? '<div class="specs" style="color:#8fbaf5">Lowest similar elsewhere: ' + aed(x.comp.price) + ' · ' + e(x.comp.broker) + ' · tap to compare</div>' : '')
+        + '<div class="meta"><span>' + e(x.agent) + '</span><span>' + pub(x.since) + '</span></div></div></div></div>';
+    }
+    function drawMore(){
+      var list = document.getElementById('plist'); if (!list || drawn >= shown.length) return;
+      var end = Math.min(drawn + BATCH, shown.length), h = '';
+      for (var i = drawn; i < end; i++) h += card(shown[i], i);
+      list.insertAdjacentHTML('beforeend', h); drawn = end;
     }
     function openDetail(ref){
       var x = L.filter(function(y){ return y.ref === ref; })[0]; if (!x) return;
       var p = parts(x), c = x.comp;
       var ini = (x.agent || '').split(/\s+/).filter(Boolean).map(function(w){ return w[0]; }).slice(0,2).join('').toUpperCase();
-      var per = x.type === 'Sale' ? '' : ' / year';
+      var per = x.type === 'Sale' ? '' : ' / year'; // market comparisons are always against yearly rents
+      var ours = !x.por && x.price ? x.price : null, diff = ours && c ? ours - c.price : null;
       sheet.innerHTML = '<button class="close" id="pclose" aria-label="Close">×</button>'
-        + '<div class="gal">' + x.imgs.map(function(u){ return '<img src="' + e(u) + '" alt="">'; }).join('') + '</div>'
+        + '<div class="gal">' + x.imgs.map(function(u, k){ return '<img loading="' + (k ? 'lazy' : 'eager') + '" decoding="async" src="' + e(u) + '" alt="">'; }).join('') + '</div>'
         + '<div class="det"><div>' + tags(x) + '</div><div class="area" style="margin-top:10px">' + e(p.area) + '</div>' + (p.bld ? '<div class="bld">' + e(p.bld) + '</div>' : '')
         + '<div class="ttl" style="font-size:17px">' + e(x.title) + '</div><div class="price">' + priceTxt(x) + '</div>'
         + '<div class="bld" style="margin-top:4px">' + e(x.ptype || '') + ' · ' + pub(x.since) + ' · ' + e(x.ref) + '</div>'
@@ -141,19 +161,23 @@
         + (c ? '<div class="box"><h4>Market check · similar listings from other agencies</h4>'
             + '<div class="r"><span>Cheapest similar</span><b>' + aed(c.price) + per + '</b></div>'
             + '<div class="r"><span>' + e(c.agent) + '</span><span>' + e(c.broker) + '</span></div>'
-            + '<div class="r"><span>Our price</span><b>' + (x.por || !x.price ? 'On request' : aed(x.price) + per) + '</b></div>'
-            + '<p>' + (x.price - c.price > 0 ? 'We are ' + aed(x.price - c.price) + ' above the lowest.' : x.price - c.price < 0 ? 'We are the lowest, ' + aed(c.price - x.price) + ' below the next.' : 'Same as the lowest.') + ' ' + c.count + ' similar listings from other agencies.</p></div>' : '')
+            + '<div class="r"><span>Our price</span><b>' + (ours ? aed(ours) + per : 'On request') + '</b></div>'
+            + '<p>' + (diff == null ? '' : diff > 0 ? 'We are ' + aed(diff) + ' above the lowest. ' : diff < 0 ? 'We are the lowest, ' + aed(-diff) + ' below the next. ' : 'Same as the lowest. ') + c.count + ' similar listings from other agencies.</p></div>' : '')
         + (x.url ? '<a class="btn" href="' + e(x.url) + '" target="_blank" rel="noopener">View on Property Finder</a>' : '')
         + '</div>';
       sheet.classList.add('open'); sheet.scrollTop = 0; document.body.style.overflow = 'hidden';
-      document.getElementById('pclose').onclick = closeDetail;
-      try { history.pushState({d:1}, ''); } catch (er) {}
+      document.getElementById('pclose').onclick = function(){ if (sheetHist) history.back(); else closeDetail(); };
+      if (!sheetHist){ try { history.pushState({d:1}, ''); sheetHist = true; } catch (er) {} }
     }
-    function closeDetail(){ sheet.classList.remove('open'); document.body.style.overflow = ''; }
+    function closeDetail(){
+      sheetHist = false; sheet.classList.remove('open'); document.body.style.overflow = '';
+      sheet.innerHTML = ''; // free the full-size gallery photos
+      if (pending){ pending = false; render(); }
+    }
     window.addEventListener('popstate', closeDetail);
+    // tapping a card opens its details (with the market check); the details screen links on to Property Finder
     main.addEventListener('click', function(ev){
-      var c = ev.target.closest('.card'); if (!c || ev.target.closest('a.go')) { if (c && !c.querySelector('a.go').getAttribute('href')) { ev.preventDefault(); openDetail(c.getAttribute('data-ref')); } return; }
-      var a = c.querySelector('a.go'); if (a && a.getAttribute('href')) window.open(a.href, '_blank', 'noopener'); else openDetail(c.getAttribute('data-ref'));
+      var c = ev.target.closest('.card'); if (c) openDetail(c.getAttribute('data-ref'));
     });
     main.addEventListener('scroll', function(ev){
       var st = ev.target; if (!st.classList || !st.classList.contains('strip')) return;
@@ -163,18 +187,43 @@
     app.querySelector('.tabs').addEventListener('click', function(ev){ var b = ev.target.closest('button'); if (!b) return; tab = b.getAttribute('data-tab'); [].forEach.call(this.children, function(x){ x.classList.toggle('on', x === b); }); render(); window.scrollTo(0,0); });
     document.getElementById('pchips').addEventListener('click', function(ev){ var b = ev.target.closest('button'); if (!b) return; filt = b.getAttribute('data-f'); [].forEach.call(this.children, function(x){ x.classList.toggle('on', x === b); }); render(); });
     document.getElementById('pq').addEventListener('input', function(){ q = this.value; render(); });
+    var pending = false, loading = 0;
     function loadPhone(){
-      fetch('data.json?t=' + Date.now(), {cache:'no-store'}).then(function(r){ return r.json(); }).then(function(d){
+      if (loading && Date.now() - loading < 30000) return; // one request at a time, but never get stuck on a hung one
+      loading = Date.now();
+      var ctl = window.AbortController ? new AbortController() : null;
+      if (ctl) setTimeout(function(){ ctl.abort(); }, 25000);
+      fetch('data.json?t=' + Date.now(), {cache:'no-store', signal: ctl ? ctl.signal : undefined}).then(function(r){ if (!r.ok) throw new Error('data ' + r.status); return r.json(); }).then(function(d){
+        loading = 0;
+        if (!d || !Array.isArray(d.listings)) throw new Error('bad data');
+        if (d.updated && d.updated === lastUpdated) return; // nothing new: keep the page as it is
+        lastUpdated = d.updated;
         SOLD = d.sold || [];
         L = (d.listings || []).map(function(x){ x.since = Date.parse(x.since || 0) || 0; x.isNew = x.since && (Date.now() - x.since) < 7*864e5; return x; })
           .filter(function(x){ return x.imgs && x.imgs.length; })
           .sort(function(a,b){ var pa = a.level === 'premium' ? 2 : a.level === 'featured' ? 1 : 0, pb = b.level === 'premium' ? 2 : b.level === 'featured' ? 1 : 0; return (b.isNew - a.isNew) || (pb - pa) || (b.since - a.since); });
         var nn = L.filter(function(x){ return x.isNew; }).length;
         document.getElementById('pstats').textContent = L.length + ' live listings · ' + nn + ' new this week';
-        if (!sheet.classList.contains('open')) render();
-      }).catch(function(){ document.getElementById('pstats').textContent = 'Could not load listings. Pull down to retry.'; });
+        if (sheet.classList.contains('open')) pending = true;
+        else {
+          // keep the reader's place when new data arrives
+          var y = window.scrollY; render(); while (drawn < shown.length && document.documentElement.scrollHeight < y + innerHeight) drawMore(); window.scrollTo(0, y);
+        }
+      }).catch(function(){
+        loading = 0;
+        // keep showing what we already have; only show an error when there is nothing to show
+        if (!L.length){
+          document.getElementById('pstats').textContent = 'Could not load listings.';
+          main.innerHTML = '<div class="empty">Could not load listings. Check the connection.<button class="retry" id="pretry">Try again</button></div>';
+          document.getElementById('pretry').onclick = function(ev){ ev.stopPropagation(); main.innerHTML = '<div class="empty">Loading…</div>'; loadPhone(); };
+        }
+      });
     }
+    window.__reload = loadPhone; // used by the test script
     loadPhone(); setInterval(loadPhone, 5*60000);
+    // phones pause background tabs; refresh as soon as the page is visible again
+    document.addEventListener('visibilitychange', function(){ if (!document.hidden) loadPhone(); });
+    window.addEventListener('pageshow', function(ev){ if (ev.persisted) loadPhone(); });
     return;
   }
 
