@@ -22,7 +22,7 @@ var css = ''
   + '#tv .bd{flex:1;display:flex;flex-direction:column;justify-content:center;gap:2.2vh}'
   + '#tv .sub{font-size:1.15vw;color:var(--gold);opacity:.8;letter-spacing:.12em;text-transform:uppercase;font-weight:600;margin-top:-1vh}'
   + '#tv .loc{font-size:3.4vw;line-height:1.05;color:var(--gold);letter-spacing:.02em;text-transform:uppercase;font-weight:800}'
-  + '#tv .ti{font-size:2.1vw;line-height:1.18;font-weight:600}#tv .pt{font-size:1.15vw;color:var(--muted)}'
+  + '#tv .ti{font-size:2.1vw;line-height:1.18;font-weight:600}#tv .pt{font-size:1.3vw;color:var(--muted);display:flex;gap:1.2vw;align-items:center;flex-wrap:wrap}#tv .pt .pub{color:var(--ink);background:rgba(255,255,255,.08);border:1px solid var(--line);padding:.5vh .9vw;border-radius:2vw;font-size:1.25vw}'
   + '#tv .pr{font-size:4.1vw;font-weight:700;line-height:1}#tv .pr small{font-size:1.5vw;font-weight:500;color:var(--muted);margin-left:.4vw}'
   + '#tv .pr .cur{font-size:1.7vw;font-weight:600;color:var(--gold);margin-right:.6vw;vertical-align:.9vw;letter-spacing:.06em}'
   + '#tv .sp{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}'
@@ -135,6 +135,15 @@ var css = ''
     if (brokers.length && slideNo % (BROKER_EVERY + 1) === 0){ showBroker(brokers[bIdx]); bIdx = (bIdx + 1) % brokers.length; }
     else show();
   }
+  function published(t){
+    if (!t) return '';
+    var d = new Date(t), now = new Date();
+    var day = function(x){ return Math.floor((x.getTime() + 4*3600000) / 864e5); }; // Dubai calendar day
+    var n = day(now) - day(d);
+    var rel = n <= 0 ? 'today' : n === 1 ? 'yesterday' : n + ' days ago';
+    var date = d.toLocaleDateString('en-GB', {day:'numeric', month:'short', year:'numeric', timeZone:'Asia/Dubai'});
+    return 'Published ' + rel + ' · ' + date;
+  }
   function priceHtml(x){
     if (x.por || !x.price) return '<span style="font-size:3vw">Price on request</span>';
     var p = x.price, t = p >= 1e6 ? (p/1e6).toFixed(2).replace(/\.?0+$/, '') + 'M' : num(p);
@@ -165,7 +174,7 @@ var css = ''
     var sub = String(x.loc || '').split(' · ').filter(function(p){ return p && p !== area; }).join(' · ');
     $('tvbd').innerHTML = '<div class="loc fd">' + esc(area) + '</div>' + (sub ? '<div class="sub fd">' + esc(sub) + '</div>' : '')
       + '<div class="ti fd" style="animation-delay:.1s">' + esc(x.title) + '</div>'
-      + '<div class="pt fd" style="animation-delay:.15s">' + esc(x.ptype || '') + '</div>'
+      + '<div class="pt fd" style="animation-delay:.15s">' + esc(x.ptype || '') + (x.since ? '<span class="pub">' + esc(published(x.since)) + '</span>' : '') + '</div>'
       + '<div class="pr fd" style="animation-delay:.2s">' + priceHtml(x) + '</div>'
       + '<div class="sp fd" style="animation-delay:.3s"><div><b>' + (x.beds === 0 ? 'Studio' : (x.beds == null || isNaN(x.beds) ? '–' : x.beds)) + '</b><span>' + (x.beds === 0 ? 'Bedroom' : 'Beds') + '</span></div>'
       + '<div><b>' + (x.baths == null || isNaN(x.baths) ? '–' : x.baths) + '</b><span>Baths</span></div>'
