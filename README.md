@@ -21,10 +21,12 @@ A live display of the Local Division's listings, taken from Property Finder and 
 
 The slideshow moves to a new slide every 15 seconds. Each kind of slide shows only what can be read in a glance from across the room:
 
-- **Listing:** photos, area, title, price, beds, baths and size, and the listing agent. Premium and Featured listings come up more often, and new listings (published in the last 7 days) are tagged **New**.
+- **Listing:** photos, area, title, price, beds, baths and size, and the listing agent. New listings (published in the last 7 days) are tagged **New**.
 - **Market check:** after a new listing, its price next to the cheapest similar listing from other agencies.
 - **Just sold / Just rented:** every 8 slides, the latest sales or rental contracts in one of the team's main areas, alternating between the two.
-- **Agent spotlight:** every 4th slide, an agent with their live listings and top areas.
+- **Agent spotlight:** after every 7 slides, an agent with their live listings and top areas.
+
+The slideshow runs in **rounds**: each round shows every listing once and each Premium or Featured listing twice, spread evenly. A round of about 170 listings takes a little over an hour. New data and the 6-hourly reload continue the round where it left off rather than starting it again, so every listing gets its turn.
 
 It shows the Dubai time, fetches new data every 5 minutes, and reloads itself every 6 hours.
 
@@ -120,7 +122,8 @@ Commits use [Conventional Commits](https://www.conventionalcommits.org/) with an
 | `app.js` | `SLIDE_MS`: time per TV slide | 15 seconds |
 | `app.js` | `REFRESH_MIN`: how often screens reload the data | 5 minutes |
 | `app.js` | `NEW_DAYS`: how long a listing counts as New | 7 days |
-| `app.js` | `SOLD_EVERY` / `BROKER_EVERY`: how often activity and agent slides appear | every 8th / 4th slide |
+| `app.js` | `SOLD_EVERY` / `BROKER_EVERY`: how often activity and agent slides appear | after every 8 listings / every 7 slides |
+| `app.js` | `PAID_PER_ROUND`: how many times each Premium/Featured listing shows per round | 2 |
 | `fetch.mjs` | `BROKER`: Property Finder broker id | `12158` |
 | `fetch.mjs` | `COMPS`: rivals kept per market check | 8 |
 | `update.yml` | `cron`: how often the data refreshes | every 10 minutes |

@@ -642,9 +642,12 @@ var css = TOKENS
 
   // ---------- data (data.json is refreshed from Property Finder every 10 minutes) ----------
   var status = {err:[]}, soldAreas = [], soldIdx = 0, rentedAreas = [], rentedIdx = 0, SOLD_EVERY = 8;
+  var dataStamp = null; // data.json's "updated" time; the slideshow only rebuilds when it changes
   function load(){
     return fetch('data.json?t=' + Date.now(), {cache:'no-store'}).then(function(r){ if (!r.ok) throw new Error('data ' + r.status); return r.json(); })
       .then(function(d){
+        if (d.updated && d.updated === dataStamp) return null; // nothing new
+        dataStamp = d.updated || String(Date.now());
         soldAreas = d.sold || []; rentedAreas = d.rented || [];
         return (d.listings || []).map(function(x){
           x.key = x.ref; x.since = Date.parse(x.since || 0) || 0; x.isNew = isNew(x.since); return x;
@@ -654,25 +657,30 @@ var css = TOKENS
 
   // ---------- slideshow ----------
   var queue = [], all = [], pos = -1, photoTimer = null, imgs = [];
+  // A "round" shows every listing once and each Premium/Featured listing twice. `shown` counts what this
+  // round has already put on screen, so rebuilding the queue (new data, or the 6-hourly reload) continues
+  // the round instead of starting it again from the top.
+  var PAID_PER_ROUND = 2, shown = {}, SHOWN_KEY = 'bh-tv-round';
+  try { var sv = JSON.parse(localStorage.getItem(SHOWN_KEY) || 'null'); if (sv && Date.now() - sv.t < 12 * 3600000) shown = sv.shown || {}; } catch (er) {}
+  function saveShown(){ try { localStorage.setItem(SHOWN_KEY, JSON.stringify({t: Date.now(), shown: shown})); } catch (er) {} }
   function buildQueue(){
-    // Premium and Featured listings get priority: one of them, then 2 other listings (newest first), repeated.
     var newest = function(a,b){ return (b.since || 0) - (a.since || 0); };
     var paid = all.filter(function(x){ return x.level === 'premium'; }).sort(newest)
       .concat(all.filter(function(x){ return x.level === 'featured'; }).sort(newest));
     var rest = all.filter(function(x){ return x.level !== 'premium' && x.level !== 'featured'; }).sort(newest);
-    queue = [];
-    if (!paid.length) queue = rest;
-    else if (!rest.length) queue = paid;
-    else {
-      var pi = 0;
-      for (var i = 0; i < rest.length; i += 2){
-        queue.push(paid[pi % paid.length]); pi++;
-        queue.push(rest[i]); if (rest[i+1]) queue.push(rest[i+1]);
-      }
+    // spread the paid slots evenly through the round; a listing's two slots land about half a round apart
+    var order = [], slots = rest.length ? paid.length * PAID_PER_ROUND : paid.length, pi = 0;
+    for (var i = 0; i < rest.length; i++){
+      order.push(rest[i]);
+      while (pi < slots && (i + 1) * slots >= (pi + 1) * rest.length) { order.push(paid[pi % paid.length]); pi++; }
     }
+    for (; pi < slots; pi++) order.push(paid[pi % paid.length]);
+    // skip what this round already showed
+    var used = {};
+    order = order.filter(function(x){ used[x.key] = (used[x.key] || 0) + 1; return used[x.key] > (shown[x.key] || 0); });
     // add a market check slide right after each new listing that has one, and a recent-sales slide every few slides
     var out = [], n = 0;
-    queue.forEach(function(x){
+    order.forEach(function(x){
       out.push(x); n++;
       if (x.comp) out.push({kind:'comp', key:'comp:' + x.key, of:x});
       // every few slides a market-activity slide, alternating just sold / just rented
@@ -684,7 +692,7 @@ var css = TOKENS
     queue = out;
     pos = -1;
   }
-  var BROKER_EVERY = 3, slideNo = 0, brokers = [], bIdx = 0;
+  var BROKER_EVERY = 7, slideNo = 0, brokers = [], bIdx = 0; // an agent spotlight after every 7 slides
   function agentKey(n){ var w = String(n || '').toLowerCase().replace(/[^a-z\s]/g,'').split(/\s+/).filter(Boolean); return w.length ? w[0] + '|' + w[w.length-1] : ''; }
   function buildBrokers(){
     var m = {};
@@ -811,9 +819,11 @@ var css = TOKENS
     startBar();
   }
   function show(){
+    if (pos >= queue.length - 1){ shown = {}; buildQueue(); } // round finished (or nothing left): start a new one
     if (!queue.length) return;
-    pos = (pos + 1) % queue.length;
+    pos++;
     var x = queue[pos], ph = $('tvph');
+    if (!x.kind){ shown[x.key] = (shown[x.key] || 0) + 1; saveShown(); }
     imgs.forEach(function(el){ el.remove(); }); clearInterval(photoTimer);
     [].forEach.call(ph.querySelectorAll('.grid,.spot'), function(el){ el.remove(); });
     $('tvag').style.display = '';
@@ -846,8 +856,7 @@ var css = TOKENS
     $('tvref').textContent = x.ref;
     var bar = $('tvbar'); bar.style.transition = 'none'; bar.style.width = '0'; void bar.offsetWidth;
     bar.style.transition = 'width ' + SLIDE_MS + 'ms linear'; bar.style.width = '100%';
-    var nx = queue[(pos + 1) % queue.length]; if (nx && nx.imgs) nx.imgs.forEach(function(u){ new Image().src = u; });
-    if (pos === queue.length - 1) buildQueue();
+    var nx = queue[pos + 1]; if (nx && nx.imgs) nx.imgs.forEach(function(u){ new Image().src = u; });
   }
   function header(){
     var n = all.filter(function(x){ return x.isNew; }).length;
@@ -856,19 +865,13 @@ var css = TOKENS
   var timer = null;
   function refresh(){
     load().then(function(list){
-      var first = !all.length; all = list; header(); buildBrokers();
+      if (!list) return; // data unchanged: keep the slideshow exactly where it is
+      var first = !timer; all = list; header(); buildBrokers();
       if (!all.length){ $('tvmsg').textContent = 'No live listings right now.'; $('tvmsg').style.display = 'grid'; return; }
       $('tvmsg').style.display = 'none';
-      if (first){ buildQueue(); show(); timer = setInterval(next, SLIDE_MS); }
-      else {
-        var seen = {}; queue.forEach(function(x){ if (!x.kind) seen[x.key] = 1; });
-        var cur = queue[pos], curKey = cur ? cur.key : null;
-        buildQueue();
-        var fresh = queue.filter(function(x){ var k = x.kind === 'comp' ? x.of.key : x.key; return x.kind !== 'sold' && x.kind !== 'rented' && !seen[k]; });
-        queue = queue.filter(function(x){ return fresh.indexOf(x) < 0; });
-        pos = curKey ? queue.findIndex(function(x){ return x.key === curKey; }) : -1;
-        queue.splice.apply(queue, [pos + 1, 0].concat(fresh));
-      }
+      // the rebuilt queue skips everything this round already showed; new listings are the newest, so they come up soon
+      buildQueue();
+      if (first){ show(); timer = setInterval(next, SLIDE_MS); }
     }).catch(function(e){
       if (!all.length){ $('tvmsg').textContent = 'Could not load the listings — check the internet connection. Retrying…'; $('tvmsg').style.display = 'grid'; setTimeout(refresh, 60000); }
     });
