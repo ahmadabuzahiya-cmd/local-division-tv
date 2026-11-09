@@ -50,6 +50,20 @@ var css = ''
   + '#tv .arow b{font-size:1.55vw;font-weight:600}#tv .arow em{font-style:normal;font-size:1.55vw;color:var(--gold);font-weight:700}'
   + '#tv .arow .tr{grid-column:1/3;height:.9vh;background:rgba(255,255,255,.08);border-radius:1vh;overflow:hidden}'
   + '#tv .arow .tr i{display:block;height:100%;background:var(--gold);border-radius:1vh;width:0;transition:width 1.4s ease}'
+  + '#tv .Mkt{background:#2b7de9;color:#fff}#tv .Sold{background:#1fa463;color:#fff}'
+  + '#tv .cmp{display:flex;flex-direction:column;gap:1.6vh}'
+  + '#tv .cmp .row{border:1px solid var(--line);border-radius:.6vw;padding:1.6vh 1.2vw;background:rgba(255,255,255,.03)}'
+  + '#tv .cmp .row.low{border-color:#2b7de9;background:rgba(43,125,233,.12)}'
+  + '#tv .cmp span{display:block;font-size:.9vw;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin-bottom:.6vh}'
+  + '#tv .cmp b{font-size:2.6vw;font-weight:700}#tv .cmp b small{font-size:1.1vw;color:var(--muted);font-weight:500;margin-left:.3vw}'
+  + '#tv .cmp i{display:block;font-style:normal;font-size:1.15vw;color:var(--ink);margin-top:.5vh}'
+  + '#tv .cmp .diff{font-size:1.2vw;color:var(--muted)}'
+  + '#tv .sold{display:flex;flex-direction:column;gap:1.3vh}'
+  + '#tv .sold h3{font-size:1vw;letter-spacing:.2em;color:var(--muted);text-transform:uppercase;font-weight:500}'
+  + '#tv .srow{display:grid;grid-template-columns:1fr auto;gap:.2vh 1vw;border-bottom:1px solid var(--line);padding-bottom:1.1vh}'
+  + '#tv .srow b{font-size:1.35vw;font-weight:600}#tv .srow em{font-style:normal;font-size:1.6vw;font-weight:700;color:#3fd08a;text-align:right}'
+  + '#tv .srow i{font-style:normal;font-size:1vw;color:var(--muted)}#tv .srow u{text-decoration:none;font-size:1vw;color:var(--muted);text-align:right}'
+  + '#tv .srow.top b{font-size:1.7vw}#tv .srow.top em{font-size:2.4vw}'
   + '#tv .msg{position:absolute;inset:0;display:grid;place-items:center;font-size:2vw;color:var(--muted);background:var(--bg);z-index:5;text-align:center;padding:5vw}';
 
   
@@ -70,10 +84,11 @@ var css = ''
   function isNew(t){ return t && (Date.now() - t) < NEW_DAYS*864e5; }
 
   // ---------- data (data.json is refreshed from Property Finder every 10 minutes) ----------
-  var status = {err:[]};
+  var status = {err:[]}, soldAreas = [], soldIdx = 0, SOLD_EVERY = 8;
   function load(){
     return fetch('data.json?t=' + Date.now(), {cache:'no-store'}).then(function(r){ if (!r.ok) throw new Error('data ' + r.status); return r.json(); })
       .then(function(d){
+        soldAreas = d.sold || [];
         return (d.listings || []).map(function(x){
           x.key = x.ref; x.since = Date.parse(x.since || 0) || 0; x.isNew = isNew(x.since); return x;
         }).filter(function(x){ return x.imgs && x.imgs.length; });
@@ -98,6 +113,14 @@ var css = ''
         queue.push(rest[i]); if (rest[i+1]) queue.push(rest[i+1]);
       }
     }
+    // add a market check slide right after each new listing that has one, and a recent-sales slide every few slides
+    var out = [], n = 0;
+    queue.forEach(function(x){
+      out.push(x); n++;
+      if (x.comp) out.push({kind:'comp', key:'comp:' + x.key, of:x});
+      if (soldAreas.length && n % SOLD_EVERY === 0){ out.push({kind:'sold', key:'sold:' + n}); }
+    });
+    queue = out;
     pos = -1;
   }
   var BROKER_EVERY = 3, slideNo = 0, brokers = [], bIdx = 0;
@@ -118,6 +141,7 @@ var css = ''
     if (bIdx >= brokers.length) bIdx = 0;
   }
   function showBroker(b){
+    $('tvag').style.display = '';
     var ph = $('tvph');
     imgs.forEach(function(el){ el.remove(); }); imgs = []; clearInterval(photoTimer);
     var old = ph.querySelector('.grid'); if (old) old.remove();
@@ -162,12 +186,68 @@ var css = ''
     var p = x.price, t = p >= 1e6 ? (p/1e6).toFixed(2).replace(/\.?0+$/, '') + 'M' : num(p);
     return '<span class="cur">AED</span>' + t + (x.type === 'Sale' ? '' : '<small>/ ' + x.period + '</small>');
   }
+  function money(p, x){ var t = p >= 1e6 ? (p/1e6).toFixed(2).replace(/\.?0+$/, '') + 'M' : num(p); return 'AED ' + t; }
+  function photosLeft(list, label, big, small){
+    var ph = $('tvph');
+    var g = document.createElement('div'); g.className = 'grid';
+    var ps = list.slice(0,4); while (ps.length < 4 && ps.length) ps.push(ps[ps.length % list.length]);
+    g.innerHTML = ps.map(function(u){ return '<div style="background-image:url(\'' + String(u).replace(/'/g,'') + '\')"></div>'; }).join('');
+    ph.insertBefore(g, $('tvtags'));
+    var sp = document.createElement('div'); sp.className = 'spot fd';
+    sp.innerHTML = '<span>' + esc(label) + '</span><b>' + esc(big) + '</b>' + (small ? '<i>' + esc(small) + '</i>' : '');
+    ph.appendChild(sp);
+    $('tvdots').innerHTML = '';
+  }
+  function startBar(){
+    var bar = $('tvbar'); bar.style.transition = 'none'; bar.style.width = '0'; void bar.offsetWidth;
+    bar.style.transition = 'width ' + SLIDE_MS + 'ms linear'; bar.style.width = '100%';
+  }
+  function showComp(x){
+    $('tvag').style.display = '';
+    var c = x.comp;
+    var area = x.area || String(x.loc || '').split(' · ').pop();
+    var what = (x.beds === 0 ? 'Studio' : (x.beds != null ? x.beds + ' BR ' : '')) + (x.ptype || '');
+    photosLeft(x.imgs, 'Market check', area, what + ' · ' + (x.type === 'Sale' ? 'for sale' : 'for rent'));
+    $('tvtags').innerHTML = '<div class="tg Mkt">MARKET CHECK</div>';
+    var ini = (c.agent || c.broker || '').split(/\s+/).filter(Boolean).map(function(w){ return w[0]; }).slice(0,2).join('').toUpperCase();
+    $('tvag').innerHTML = '<div class="av ini">' + esc(ini) + '</div><div class="fd"><span>Other agency · ' + esc(c.broker) + '</span><b>' + esc(c.agent || c.broker) + '</b></div>';
+    var per = x.type === 'Sale' ? '' : '<small>/ year</small>';
+    var diff = x.price && c.price ? x.price - c.price : 0;
+    $('tvbd').innerHTML = '<div class="cmp fd">'
+      + '<div class="row low"><span>Cheapest similar on Property Finder</span><b>' + money(c.price) + per + '</b><i>' + esc(c.broker) + (c.loc ? ' · ' + esc(c.loc) : '') + (c.size ? ' · ' + num(c.size) + ' sq ft' : '') + '</i></div>'
+      + '<div class="row"><span>Our listing · ' + esc(x.agent || '') + '</span><b>' + (x.por || !x.price ? 'Price on request' : money(x.price) + per) + '</b><i>' + esc(x.ref) + (x.size ? ' · ' + num(x.size) + ' sq ft' : '') + '</i></div>'
+      + '<div class="diff">' + (diff > 0 ? 'We are ' + money(diff) + ' above the lowest' : diff < 0 ? 'We are the lowest — ' + money(-diff) + ' below the next' : 'Same as the lowest') + ' · ' + c.count + ' similar from other agencies</div>'
+      + '</div>';
+    $('tvref').textContent = x.ref;
+    startBar();
+  }
+  function showSold(){
+    if (!soldAreas.length){ return show(); }
+    var a = soldAreas[soldIdx % soldAreas.length]; soldIdx++;
+    var mine = all.filter(function(x){ return x.area === a.area; }).map(function(x){ return x.imgs[0]; }).filter(Boolean);
+    if (!mine.length) mine = all.slice(0,4).map(function(x){ return x.imgs[0]; });
+    var top = a.items.slice().sort(function(p,q){ return q.price - p.price; })[0];
+    photosLeft(mine, 'Just sold in', a.area, top ? top.type + ' sold for ' + money(top.price) : '');
+    $('tvtags').innerHTML = '<div class="tg Sold">RECENTLY SOLD</div>';
+    $('tvag').innerHTML = ''; $('tvag').style.display = 'none';
+    var fmt = function(d){ return new Date(d + 'T00:00:00+04:00').toLocaleDateString('en-GB', {day:'numeric', month:'short'}); };
+    $('tvbd').innerHTML = '<div class="loc fd">' + esc(a.area) + '</div><div class="sold fd"><h3>Latest sales · Property Finder transactions</h3>'
+      + a.items.slice(0,5).map(function(t, i){
+          var what = [t.type, t.beds ? t.beds + ' BR' : '', t.size ? num(t.size) + ' sq ft' : ''].filter(Boolean).join(' · ');
+          return '<div class="srow' + (t === top ? ' top' : '') + '"><b>' + esc(t.place || a.area) + '</b><em>' + money(t.price) + '</em><i>' + esc(what) + '</i><u>' + fmt(t.date) + '</u></div>';
+        }).join('') + '</div>';
+    $('tvref').textContent = '';
+    startBar();
+  }
   function show(){
     if (!queue.length) return;
     pos = (pos + 1) % queue.length;
     var x = queue[pos], ph = $('tvph');
     imgs.forEach(function(el){ el.remove(); }); clearInterval(photoTimer);
     [].forEach.call(ph.querySelectorAll('.grid,.spot'), function(el){ el.remove(); });
+    $('tvag').style.display = '';
+    if (x.kind === 'comp'){ showComp(x.of); return; }
+    if (x.kind === 'sold'){ showSold(); return; }
     imgs = x.imgs.map(function(u){ var el = new Image(); el.onerror = function(){ el.dataset.bad = 1; }; el.src = u; ph.insertBefore(el, $('tvtags')); return el; });
     var dots = $('tvdots'); dots.innerHTML = x.imgs.map(function(){ return '<i></i>'; }).join('');
     var p = 0;
@@ -195,7 +275,7 @@ var css = ''
     $('tvref').textContent = x.ref;
     var bar = $('tvbar'); bar.style.transition = 'none'; bar.style.width = '0'; void bar.offsetWidth;
     bar.style.transition = 'width ' + SLIDE_MS + 'ms linear'; bar.style.width = '100%';
-    var nx = queue[(pos + 1) % queue.length]; if (nx) nx.imgs.forEach(function(u){ new Image().src = u; });
+    var nx = queue[(pos + 1) % queue.length]; if (nx && nx.imgs) nx.imgs.forEach(function(u){ new Image().src = u; });
     if (pos === queue.length - 1) buildQueue();
   }
   function header(){
@@ -210,12 +290,12 @@ var css = ''
       $('tvmsg').style.display = 'none';
       if (first){ buildQueue(); show(); timer = setInterval(next, SLIDE_MS); }
       else {
-        var live = {}; all.forEach(function(x){ live[x.key] = x; });
-        var seen = {}; queue.forEach(function(x){ seen[x.key] = 1; });
-        var cur = queue[pos];
-        queue = queue.filter(function(x){ return live[x.key]; }).map(function(x){ return live[x.key]; });
-        var fresh = all.filter(function(x){ return !seen[x.key]; });
-        pos = cur ? Math.max(-1, queue.findIndex(function(x){ return x.key === cur.key; })) : -1;
+        var seen = {}; queue.forEach(function(x){ if (!x.kind) seen[x.key] = 1; });
+        var cur = queue[pos], curKey = cur ? cur.key : null;
+        buildQueue();
+        var fresh = queue.filter(function(x){ var k = x.kind === 'comp' ? x.of.key : x.key; return x.kind !== 'sold' && !seen[k]; });
+        queue = queue.filter(function(x){ return fresh.indexOf(x) < 0; });
+        pos = curKey ? queue.findIndex(function(x){ return x.key === curKey; }) : -1;
         queue.splice.apply(queue, [pos + 1, 0].concat(fresh));
       }
     }).catch(function(e){
