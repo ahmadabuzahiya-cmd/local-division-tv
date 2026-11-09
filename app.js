@@ -83,8 +83,21 @@ var css = ''
   // ---------- slideshow ----------
   var queue = [], all = [], pos = -1, photoTimer = null, imgs = [];
   function buildQueue(){
-    // newest listings first, oldest last
-    queue = all.slice().sort(function(a,b){ return (b.since || 0) - (a.since || 0); });
+    // Premium and Featured listings get priority: one of them, then 2 other listings (newest first), repeated.
+    var newest = function(a,b){ return (b.since || 0) - (a.since || 0); };
+    var paid = all.filter(function(x){ return x.level === 'premium'; }).sort(newest)
+      .concat(all.filter(function(x){ return x.level === 'featured'; }).sort(newest));
+    var rest = all.filter(function(x){ return x.level !== 'premium' && x.level !== 'featured'; }).sort(newest);
+    queue = [];
+    if (!paid.length) queue = rest;
+    else if (!rest.length) queue = paid;
+    else {
+      var pi = 0;
+      for (var i = 0; i < rest.length; i += 2){
+        queue.push(paid[pi % paid.length]); pi++;
+        queue.push(rest[i]); if (rest[i+1]) queue.push(rest[i+1]);
+      }
+    }
     pos = -1;
   }
   var BROKER_EVERY = 3, slideNo = 0, brokers = [], bIdx = 0;
