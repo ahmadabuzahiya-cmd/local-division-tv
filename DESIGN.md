@@ -35,6 +35,26 @@ All tokens live in `TOKENS` at the top of `app.js`, and both views start from it
 - **Icons:** one stroke family (2px, round caps), 16–18px.
 - **Motion:** short and purposeful (`--ease`, 200–300ms on the phone), and it respects `prefers-reduced-motion`.
 - **TV:** sizes in `vw`/`vh` so it scales to any screen; colours come from the same tokens through the aliases `--panel`, `--ink`, `--muted` and `--gold`.
+
+## TV rules (viewed from across a room)
+
+These follow common 10-foot UI and signage guidance:
+
+- **Type scale** (`--t-*`, in `vw`; the px values are at 1920px wide):
+
+  | Token | Size | Use |
+  |---|---|---|
+  | `--t-xs` | 1.35vw ≈ 26px | Labels; nothing is smaller |
+  | `--t-sm` | 1.6vw ≈ 31px | Secondary text, tags |
+  | `--t-md` | 2vw ≈ 38px | Names, rows |
+  | `--t-lg` | 2.6vw ≈ 50px | Facts, comparison prices |
+  | `--t-xl` | 4.2vw ≈ 80px | The area name |
+  | `--t-xxl` | 5.4vw ≈ 104px | The price |
+
+  Sources: tvOS body text ≥ 29pt and secondary ≥ 25pt; signage guidance of about 1 inch of letter height per 10 ft of viewing distance.
+- **Safe area:** content stays 5% in from the edges (`--safe-x` 5vw, `--safe-y` 5vh) because some TVs crop the edges (overscan).
+- **Readable at a glance:** each slide is understood in 3–5 seconds. That means one big number, a few short facts, and no paragraphs, reference codes or full dates. Lists have at most 4 rows. Say it once: if the tag names the slide, the caption doesn't repeat it.
+- **Weights 500 and up** (thin strokes disappear on TVs), light text on dark, and a dark fade behind any text placed over photos.
 - **PDF brochure:** a print-friendly white A4 page using the same navy and gold, with gold darkened to `#a8843f` so it stays legible on paper. It's for clients, so it never includes market-check or competitor data. On the details screen it is the one gold (primary) button; "View on Property Finder" is secondary.
 
 ## Checklist before shipping a UI change

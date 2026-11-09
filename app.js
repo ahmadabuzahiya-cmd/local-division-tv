@@ -557,66 +557,71 @@ var css = TOKENS
   + ':root{--panel:var(--surface-1);--ink:var(--text-1);--muted:var(--text-2);--gold:var(--accent-text)}'
   + '*{box-sizing:border-box;margin:0;padding:0}'
   + 'html,body{height:100%;background:var(--bg)!important;color:var(--ink);overflow:hidden;font-family:var(--font)}'
-  + '#tv{position:fixed;inset:0;display:grid;grid-template-columns:62% 38%;z-index:2147483647;background:var(--bg);cursor:none}'
+  // TV type scale and safe area (see DESIGN.md, "TV"): sized for reading across a room.
+  // At 1920px wide, 1vw = 19.2px: --t-xs 26px is the floor for any text; --t-xxl 104px is the one big number.
+  + ':root{--t-xs:1.35vw;--t-sm:1.6vw;--t-md:2vw;--t-lg:2.6vw;--t-xl:4.2vw;--t-xxl:5.4vw;--safe-x:5vw;--safe-y:5vh}'
+  + '#tv{position:fixed;inset:0;display:grid;grid-template-columns:56% 44%;z-index:2147483647;background:var(--bg);cursor:none}'
   + '#tv .ph{position:relative;overflow:hidden;background:#000}'
   + '#tv .ph img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity 1.2s ease;transform:scale(1.04)}'
   + '#tv .ph img.on{opacity:1;animation:tvkb 14s linear forwards}'
   + '@keyframes tvkb{from{transform:scale(1.04)}to{transform:scale(1.12)}}'
   + '#tv .ph:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(14,25,37,0) 70%,rgba(14,25,37,.85) 100%),linear-gradient(0deg,rgba(0,0,0,.35) 0%,rgba(0,0,0,0) 25%)}'
-  + '#tv .tags{position:absolute;top:3.5vh;left:3vw;z-index:2;display:flex;gap:.8vw}'
-  + '#tv .tg{padding:.8vh 1.1vw;border-radius:.4vw;font-weight:600;font-size:1.2vw;background:var(--scrim);color:var(--text-1);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}'
+  + '#tv .tags{position:absolute;top:var(--safe-y);left:var(--safe-x);z-index:2;display:flex;gap:.8vw}'
+  + '#tv .tg{padding:1vh 1.3vw;border-radius:.5vw;font-weight:600;font-size:var(--t-sm);background:var(--scrim);color:var(--text-1);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}'
   // one accent: only New is gold; sale/rent, tier, market check and sold are neutral labels
   + '#tv .New{background:var(--accent);color:var(--on-accent)}'
-  + '#tv .dots{position:absolute;left:3vw;bottom:3vh;display:flex;gap:.6vw;z-index:2}'
-  + '#tv .dots i{width:2.2vw;height:.45vh;background:rgba(255,255,255,.35);border-radius:2px}#tv .dots i.on{background:#fff}'
-  + '#tv .in{position:relative;padding:5vh 3.2vw 4vh 2.6vw;display:flex;flex-direction:column;background:var(--panel)}'
-  + '#tv .br{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid var(--line);padding-bottom:1.8vh}'
-  + '#tv .br b{font-size:1.6vw;font-weight:700}#tv .br .logo svg{height:2.3vw;width:auto;display:block;color:var(--text-1)}#tv .br span{white-space:nowrap;font-size:.95vw;color:var(--muted);letter-spacing:.01em;text-transform:none}'
-  + '#tv .bd{flex:1;display:flex;flex-direction:column;justify-content:center;gap:2.2vh}'
-  + '#tv .sub{font-size:1.15vw;color:var(--gold);opacity:.8;letter-spacing:.01em;text-transform:none;font-weight:600;margin-top:-1vh}'
-  + '#tv .loc{font-size:3.6vw;line-height:1.05;color:var(--gold);letter-spacing:-.01em;text-transform:none;font-weight:700}'
-  + '#tv .ti{font-size:2.1vw;line-height:1.18;font-weight:600}#tv .pt{font-size:1.3vw;color:var(--muted);display:flex;gap:1.2vw;align-items:center;flex-wrap:wrap}#tv .pt .pub{color:var(--ink);background:var(--surface-3);padding:.5vh .9vw;border-radius:2vw;font-size:1.25vw}'
-  + '#tv .pr{font-size:4.1vw;font-weight:700;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.01em}#tv .pr small{font-size:1.5vw;font-weight:500;color:var(--muted);margin-left:.4vw}'
-  + '#tv .pr .cur{font-size:1.7vw;font-weight:600;color:var(--gold);margin-right:.6vw;vertical-align:.9vw;letter-spacing:.01em}'
-  + '#tv .sp{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}'
-  + '#tv .sp div{padding:2.2vh 0}#tv .sp div+div{padding-left:1.4vw;border-left:1px solid var(--line)}'
-  + '#tv .sp b{display:block;font-size:2.1vw;font-weight:600}#tv .sp span{font-size:.9vw;color:var(--muted);letter-spacing:.01em;text-transform:none}'
-  + '#tv .pl{font-size:1.05vw;color:var(--muted)}'
-  + '#tv .ag{display:flex;align-items:center;gap:1.1vw;padding:2.2vh 0;border-bottom:1px solid var(--line);min-height:12vh}'
-  + '#tv .ag .av{width:6.2vw;height:6.2vw;border-radius:50%;object-fit:cover;object-position:top;flex:none;background:var(--surface-3)}'
-  + '#tv .ag .ini{display:grid;place-items:center;font-size:2vw;font-weight:600;color:var(--text-2)}'
-  + '#tv .ag span{display:block;font-size:.85vw;color:var(--muted);letter-spacing:.01em;text-transform:none;margin-bottom:.6vh}'
-  + '#tv .ag b{font-size:1.7vw;font-weight:600;line-height:1.2}'
-  + '#tv .ft{display:flex;justify-content:space-between;font-size:.95vw;color:var(--muted)}'
-  + '#tv .bar{position:absolute;left:0;bottom:0;height:.5vh;background:var(--gold);width:0}'
+  + '#tv .dots{position:absolute;left:var(--safe-x);bottom:var(--safe-y);display:flex;gap:.6vw;z-index:2}'
+  + '#tv .dots i{width:2.6vw;height:.6vh;background:rgba(255,255,255,.35);border-radius:2px}#tv .dots i.on{background:#fff}'
+  + '#tv .in{position:relative;padding:var(--safe-y) var(--safe-x) var(--safe-y) 3.2vw;display:flex;flex-direction:column;background:var(--panel)}'
+  + '#tv .br{display:flex;justify-content:space-between;align-items:center;padding-bottom:2vh}'
+  + '#tv .br .logo svg{height:2.6vw;width:auto;display:block;color:var(--text-1)}#tv .br span{white-space:nowrap;font-size:var(--t-xs);font-weight:500;color:var(--muted)}'
+  + '#tv .bd{flex:1;display:flex;flex-direction:column;justify-content:center;gap:2.6vh}'
+  + '#tv .sub{font-size:var(--t-sm);color:var(--text-2);font-weight:500;margin-top:-1.4vh}'
+  + '#tv .loc{font-size:var(--t-xl);line-height:1.02;color:var(--gold);letter-spacing:-.015em;font-weight:700}'
+  // the title is a highlight, not a paragraph: at most two lines
+  + '#tv .ti{font-size:var(--t-md);line-height:1.2;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}'
+  + '#tv .pt{font-size:var(--t-sm);font-weight:500;color:var(--muted);display:flex;gap:1.2vw;align-items:center;flex-wrap:wrap}'
+  + '#tv .pr{font-size:var(--t-xxl);font-weight:700;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em}#tv .pr small{font-size:var(--t-sm);font-weight:500;color:var(--muted);margin-left:.5vw;letter-spacing:0}'
+  + '#tv .pr .cur{font-size:var(--t-md);font-weight:600;color:var(--gold);margin-right:.7vw;vertical-align:1.3vw;letter-spacing:0}'
+  + '#tv .sp{display:grid;grid-template-columns:repeat(3,auto);justify-content:start;gap:0 3.2vw}'
+  + '#tv .sp b{display:block;font-size:var(--t-lg);font-weight:600;line-height:1.1;font-variant-numeric:tabular-nums}#tv .sp span{font-size:var(--t-xs);font-weight:500;color:var(--muted)}'
+  + '#tv .ag{display:flex;align-items:center;gap:1.4vw;padding:2.4vh 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);min-height:13vh}'
+  + '#tv .ag .av{width:6.8vw;height:6.8vw;border-radius:50%;object-fit:cover;object-position:top;flex:none;background:var(--surface-3)}'
+  + '#tv .ag .ini{display:grid;place-items:center;font-size:var(--t-md);font-weight:600;color:var(--text-2)}'
+  + '#tv .ag span{display:block;font-size:var(--t-xs);font-weight:500;color:var(--muted);margin-bottom:.4vh}'
+  + '#tv .ag b{font-size:var(--t-md);font-weight:600;line-height:1.15}'
+  + '#tv .ft{display:flex;justify-content:space-between;font-size:var(--t-xs);font-weight:500;color:var(--muted)}'
+  + '#tvref{display:none}' // internal reference codes mean nothing to people in the room
+  + '#tv .bar{position:absolute;left:0;bottom:0;height:.6vh;background:var(--gold);width:0}'
   + '#tv .fd{animation:tvin .9s ease both}@keyframes tvin{from{opacity:0;transform:translateY(1.2vh)}to{opacity:1;transform:none}}'
   + '#tv .grid{position:absolute;inset:0;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:4px;background:#000}'
   + '#tv .grid div{background-size:cover;background-position:center;animation:tvkb 15s linear forwards}'
-  + '#tv .grid:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(14,25,37,.15),rgba(14,25,37,.85))}'
-  + '#tv .spot{position:absolute;left:3vw;bottom:5vh;z-index:3}'
-  + '#tv .spot span{display:block;font-size:1.1vw;letter-spacing:.01em;color:var(--gold);text-transform:none;margin-bottom:1vh}'
-  + '#tv .spot b{display:block;font-size:4.2vw;line-height:1;font-weight:700}'
-  + '#tv .spot i{display:block;font-style:normal;font-size:1.4vw;color:var(--muted);margin-top:1.4vh}'
-  + '#tv .areas{display:flex;flex-direction:column;gap:2.1vh}'
-  + '#tv .areas h3{font-size:1vw;letter-spacing:.01em;color:var(--muted);text-transform:none;font-weight:500}'
-  + '#tv .arow{display:grid;grid-template-columns:1fr auto;gap:.4vh 1vw;align-items:baseline}'
-  + '#tv .arow b{font-size:1.55vw;font-weight:600}#tv .arow em{font-style:normal;font-size:1.55vw;color:var(--gold);font-weight:700}'
-  + '#tv .arow .tr{grid-column:1/3;height:.9vh;background:var(--surface-3);border-radius:1vh;overflow:hidden}'
+  // the bottom fade keeps the caption over the photos legible (contrast) on bright pictures
+  + '#tv .grid:after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,rgba(9,18,27,.92) 0%,rgba(9,18,27,.55) 28%,rgba(9,18,27,0) 50%),linear-gradient(90deg,rgba(14,25,37,.1),rgba(14,25,37,.85))}'
+  + '#tv .spot{position:absolute;left:var(--safe-x);right:var(--safe-x);bottom:calc(var(--safe-y) + 2vh);z-index:3}'
+  + '#tv .spot span{display:block;font-size:var(--t-sm);font-weight:600;color:var(--gold);margin-bottom:1vh}'
+  + '#tv .spot b{display:block;font-size:var(--t-xl);line-height:1;font-weight:700}'
+  + '#tv .spot i{display:block;font-style:normal;font-size:var(--t-md);font-weight:500;color:var(--text-1);opacity:.85;margin-top:1.4vh}'
+  + '#tv .areas{display:flex;flex-direction:column;gap:2.6vh}'
+  + '#tv .areas h3{font-size:var(--t-sm);color:var(--muted);font-weight:500}'
+  + '#tv .arow{display:grid;grid-template-columns:1fr auto;gap:.8vh 1vw;align-items:baseline}'
+  + '#tv .arow b{font-size:var(--t-md);font-weight:600}#tv .arow em{font-style:normal;font-size:var(--t-md);color:var(--gold);font-weight:700;font-variant-numeric:tabular-nums}'
+  + '#tv .arow .tr{grid-column:1/3;height:1vh;background:var(--surface-3);border-radius:1vh;overflow:hidden}'
   + '#tv .arow .tr i{display:block;height:100%;background:var(--gold);border-radius:1vh;width:0;transition:width 1.4s ease}'
-  + '#tv .cmp{display:flex;flex-direction:column;gap:1.2vh}'
-  + '#tv .cmp .row{border-radius:.6vw;padding:1.8vh 1.3vw;background:var(--surface-2)}'
+  + '#tv .cmp{display:flex;flex-direction:column;gap:1.6vh}'
+  + '#tv .cmp .row{border-radius:.8vw;padding:2.2vh 1.6vw;background:var(--surface-2)}'
   + '#tv .cmp .row.low{background:var(--surface-3)}'
-  + '#tv .cmp span{display:block;font-size:.9vw;letter-spacing:.01em;text-transform:none;color:var(--muted);margin-bottom:.6vh}'
-  + '#tv .cmp b{font-size:2.6vw;font-weight:700;font-variant-numeric:tabular-nums}#tv .cmp b small{font-size:1.1vw;color:var(--muted);font-weight:500;margin-left:.3vw}'
-  + '#tv .cmp i{display:block;font-style:normal;font-size:1.15vw;color:var(--ink);margin-top:.5vh}'
-  + '#tv .cmp .diff{font-size:1.2vw;color:var(--muted)}'
-  + '#tv .sold{display:flex;flex-direction:column;gap:1.3vh}'
-  + '#tv .sold h3{font-size:1vw;letter-spacing:.01em;color:var(--muted);text-transform:none;font-weight:500}'
-  + '#tv .srow{display:grid;grid-template-columns:1fr auto;gap:.2vh 1vw;border-bottom:1px solid var(--line);padding-bottom:1.1vh}'
-  + '#tv .srow b{font-size:1.35vw;font-weight:600}#tv .srow em{font-style:normal;font-size:1.6vw;font-weight:600;color:var(--text-1);text-align:right;font-variant-numeric:tabular-nums}'
-  + '#tv .srow i{font-style:normal;font-size:1vw;color:var(--muted)}#tv .srow u{text-decoration:none;font-size:1vw;color:var(--muted);text-align:right}'
-  + '#tv .srow.top b{font-size:1.7vw}#tv .srow.top em{font-size:2.4vw;font-weight:700;color:var(--gold)}#tv .srow em small{font-size:1vw;font-weight:500;color:var(--muted)}'
-  + '#tv .msg{position:absolute;inset:0;display:grid;place-items:center;font-size:2vw;color:var(--muted);background:var(--bg);z-index:5;text-align:center;padding:5vw}';
+  + '#tv .cmp span{display:block;font-size:var(--t-xs);font-weight:500;color:var(--muted);margin-bottom:.6vh}'
+  + '#tv .cmp b{font-size:var(--t-lg);font-weight:700;font-variant-numeric:tabular-nums}#tv .cmp b small{font-size:var(--t-xs);color:var(--muted);font-weight:500;margin-left:.4vw}'
+  + '#tv .cmp i{display:block;font-style:normal;font-size:var(--t-sm);font-weight:500;color:var(--ink);margin-top:.6vh}'
+  + '#tv .cmp .diff{font-size:var(--t-sm);font-weight:600;color:var(--ink)}'
+  + '#tv .sold{display:flex;flex-direction:column;gap:2vh}'
+  + '#tv .sold h3{font-size:var(--t-sm);color:var(--muted);font-weight:500}'
+  + '#tv .srow{display:grid;grid-template-columns:1fr auto;gap:.4vh 1.2vw;border-bottom:1px solid var(--line);padding-bottom:1.6vh}'
+  + '#tv .srow b{font-size:var(--t-md);font-weight:600}#tv .srow em{font-style:normal;font-size:var(--t-md);font-weight:600;color:var(--text-1);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}'
+  + '#tv .srow i{font-style:normal;font-size:var(--t-xs);font-weight:500;color:var(--muted)}#tv .srow u{text-decoration:none;font-size:var(--t-xs);font-weight:500;color:var(--muted);text-align:right}'
+  + '#tv .srow.top em{color:var(--gold);font-weight:700}#tv .srow em small{font-size:var(--t-xs);font-weight:500;color:var(--muted)}'
+  + '#tv .msg{position:absolute;inset:0;display:grid;place-items:center;font-size:var(--t-lg);color:var(--muted);background:var(--bg);z-index:5;text-align:center;padding:var(--safe-x)}';
 
   
   var st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
@@ -714,7 +719,7 @@ var css = TOKENS
     $('tvag').innerHTML = (b.avatar ? '<img class="av" src="' + esc(b.avatar) + '" alt="">' : '<div class="av ini">' + esc(ini) + '</div>')
       + '<div class="fd"><span>Listing agent</span><b>' + esc(b.name) + '</b></div>';
     var av = tv.querySelector('#tvag img.av'); if (av) av.onerror = function(){ av.outerHTML = '<div class="av ini">' + esc(ini) + '</div>'; };
-    var top = Object.keys(b.areas).map(function(a){ return [a, b.areas[a]]; }).sort(function(x,y){ return y[1] - x[1]; }).slice(0,5);
+    var top = Object.keys(b.areas).map(function(a){ return [a, b.areas[a]]; }).sort(function(x,y){ return y[1] - x[1]; }).slice(0,4);
     var max = top.length ? top[0][1] : 1;
     $('tvbd').innerHTML = '<div class="areas fd"><h3>Where ' + esc(b.name.split(' ')[0]) + ' has the most listings</h3>'
       + top.map(function(t){ return '<div class="arow"><b>' + esc(t[0]) + '</b><em>' + t[1] + '</em><div class="tr"><i data-w="' + Math.round(t[1]/max*100) + '"></i></div></div>'; }).join('') + '</div>';
@@ -737,6 +742,12 @@ var css = TOKENS
     var date = d.toLocaleDateString('en-GB', {day:'numeric', month:'short', year:'numeric', timeZone:'Asia/Dubai'});
     return 'Published ' + rel + ' · ' + date;
   }
+  // short and glanceable: "Listed 3 days ago" (Dubai calendar days), no full date
+  function listedAgo(t){
+    if (!t) return '';
+    var day = function(v){ return Math.floor((v + 4*3600000) / 864e5); }, n = day(Date.now()) - day(t);
+    return n <= 0 ? 'Listed today' : n === 1 ? 'Listed yesterday' : 'Listed ' + n + ' days ago';
+  }
   function priceHtml(x){
     if (x.por || !x.price) return '<span style="font-size:3vw">Price on request</span>';
     var p = x.price, t = p >= 1e6 ? (p/1e6).toFixed(2).replace(/\.?0+$/, '') + 'M' : num(p);
@@ -750,7 +761,7 @@ var css = TOKENS
     g.innerHTML = ps.map(function(u){ return '<div style="background-image:url(\'' + String(u).replace(/'/g,'') + '\')"></div>'; }).join('');
     ph.insertBefore(g, $('tvtags'));
     var sp = document.createElement('div'); sp.className = 'spot fd';
-    sp.innerHTML = '<span>' + esc(label) + '</span><b>' + esc(big) + '</b>' + (small ? '<i>' + esc(small) + '</i>' : '');
+    sp.innerHTML = (label ? '<span>' + esc(label) + '</span>' : '') + '<b>' + esc(big) + '</b>' + (small ? '<i>' + esc(small) + '</i>' : '');
     ph.appendChild(sp);
     $('tvdots').innerHTML = '';
   }
@@ -763,16 +774,16 @@ var css = TOKENS
     var c = x.comp;
     var area = x.area || String(x.loc || '').split(' · ').pop();
     var what = (x.beds === 0 ? 'Studio' : (x.beds != null ? x.beds + ' BR ' : '')) + (x.ptype || '');
-    photosLeft(x.imgs, 'Market check', area, what + ' · ' + (x.type === 'Sale' ? 'for sale' : 'for rent'));
+    // say it once: the tag names the slide, the caption names the home, the panel holds only the two prices
+    photosLeft(x.imgs, '', area, what + ' · ' + (x.type === 'Sale' ? 'for sale' : 'for rent'));
     $('tvtags').innerHTML = '<div class="tg Mkt">Market check</div>';
-    var ini = (c.agent || c.broker || '').split(/\s+/).filter(Boolean).map(function(w){ return w[0]; }).slice(0,2).join('').toUpperCase();
-    $('tvag').innerHTML = '<div class="av ini">' + esc(ini) + '</div><div class="fd"><span>Other agency · ' + esc(c.broker) + '</span><b>' + esc(c.agent || c.broker) + '</b></div>';
+    $('tvag').innerHTML = ''; $('tvag').style.display = 'none';
     var per = x.type === 'Sale' ? '' : '<small>/ year</small>';
     var diff = x.price && c.price ? x.price - c.price : 0;
     $('tvbd').innerHTML = '<div class="cmp fd">'
-      + '<div class="row low"><span>Cheapest similar on Property Finder</span><b>' + money(c.price) + per + '</b><i>' + esc(c.broker) + (c.loc ? ' · ' + esc(c.loc) : '') + (c.size ? ' · ' + num(c.size) + ' sq ft' : '') + '</i></div>'
-      + '<div class="row"><span>Our listing · ' + esc(x.agent || '') + '</span><b>' + (x.por || !x.price ? 'Price on request' : money(x.price) + per) + '</b><i>' + esc(x.ref) + (x.size ? ' · ' + num(x.size) + ' sq ft' : '') + '</i></div>'
-      + '<div class="diff">' + (diff > 0 ? 'We are ' + money(diff) + ' above the lowest' : diff < 0 ? 'We are the lowest — ' + money(-diff) + ' below the next' : 'Same as the lowest') + ' · ' + c.count + ' similar from other agencies</div>'
+      + '<div class="row low"><span>Cheapest similar elsewhere</span><b>' + money(c.price) + per + '</b><i>' + esc(c.broker) + (c.size ? ' · ' + num(c.size) + ' sq ft' : '') + '</i></div>'
+      + '<div class="row"><span>Our listing</span><b>' + (x.por || !x.price ? 'Price on request' : money(x.price) + per) + '</b>' + (x.size ? '<i>' + num(x.size) + ' sq ft</i>' : '') + '</div>'
+      + '<div class="diff">' + (diff > 0 ? money(diff) + ' above the cheapest' : diff < 0 ? 'Cheapest on the market' : 'Same as the cheapest') + '</div>'
       + '</div>';
     $('tvref').textContent = x.ref;
     startBar();
@@ -785,13 +796,13 @@ var css = TOKENS
     var a = rent ? groups[rentedIdx++ % groups.length] : groups[soldIdx++ % groups.length];
     var mine = all.filter(function(x){ return x.area === a.area; }).map(function(x){ return x.imgs[0]; }).filter(Boolean);
     if (!mine.length) mine = all.slice(0,4).map(function(x){ return x.imgs[0]; });
-    var top = a.items.slice().sort(function(p,q){ return q.price - p.price; })[0];
+    var top = a.items.slice(0,4).sort(function(p,q){ return q.price - p.price; })[0]; // highlight one of the rows shown
     photosLeft(mine, rent ? 'Just rented in' : 'Just sold in', a.area, top ? top.type + (rent ? ' rented for ' : ' sold for ') + money(top.price) + (rent && (!top.months || top.months >= 11) ? ' a year' : '') : '');
     $('tvtags').innerHTML = '<div class="tg Sold">' + (rent ? 'Just rented' : 'Just sold') + '</div>';
     $('tvag').innerHTML = ''; $('tvag').style.display = 'none';
     var fmt = function(d){ return new Date(d + 'T00:00:00+04:00').toLocaleDateString('en-GB', {day:'numeric', month:'short'}); };
-    $('tvbd').innerHTML = '<div class="loc fd">' + esc(a.area) + '</div><div class="sold fd"><h3>' + (rent ? 'Latest rentals · Property Finder transactions' : 'Latest sales · Property Finder transactions') + '</h3>'
-      + a.items.slice(0,5).map(function(t){
+    $('tvbd').innerHTML = '<div class="loc fd">' + esc(a.area) + '</div><div class="sold fd"><h3>' + (rent ? 'Latest rentals' : 'Latest sales') + '</h3>'
+      + a.items.slice(0,4).map(function(t){
           var what = [t.type, t.beds ? t.beds + ' BR' : '', t.size ? num(t.size) + ' sq ft' : ''].filter(Boolean).join(' · ');
           return '<div class="srow' + (t === top ? ' top' : '') + '"><b>' + esc(t.place || a.area) + '</b><em>' + money(t.price) + (rent ? rentTermTv(t) : '') + '</em><i>' + esc(what) + '</i>'
             + '<u>' + (rent && t.status ? esc(t.status) + ' · ' : '') + fmt(t.date) + '</u></div>';
@@ -827,7 +838,7 @@ var css = TOKENS
     var sub = String(x.loc || '').split(' · ').filter(function(p){ return p && p !== area; }).join(' · ');
     $('tvbd').innerHTML = '<div class="loc fd">' + esc(area) + '</div>' + (sub ? '<div class="sub fd">' + esc(sub) + '</div>' : '')
       + '<div class="ti fd" style="animation-delay:.1s">' + esc(x.title) + '</div>'
-      + '<div class="pt fd" style="animation-delay:.15s">' + esc(x.ptype || '') + (x.since ? '<span class="pub">' + esc(published(x.since)) + '</span>' : '') + '</div>'
+      + '<div class="pt fd" style="animation-delay:.15s">' + esc([x.ptype, listedAgo(x.since)].filter(Boolean).join(' · ')) + '</div>'
       + '<div class="pr fd" style="animation-delay:.2s">' + priceHtml(x) + '</div>'
       + '<div class="sp fd" style="animation-delay:.3s"><div><b>' + (x.beds === 0 ? 'Studio' : (x.beds == null || isNaN(x.beds) ? '–' : x.beds)) + '</b><span>' + (x.beds === 0 ? 'Bedroom' : 'Beds') + '</span></div>'
       + '<div><b>' + (x.baths == null || isNaN(x.baths) ? '–' : x.baths) + '</b><span>Baths</span></div>'
