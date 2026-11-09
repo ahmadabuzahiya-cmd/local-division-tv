@@ -19,9 +19,10 @@ var css = ''
   + '#tv .in{position:relative;padding:5vh 3.2vw 4vh 2.6vw;display:flex;flex-direction:column;background:var(--panel)}'
   + '#tv .br{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid var(--line);padding-bottom:1.8vh}'
   + '#tv .br b{font-size:1.6vw;font-weight:700}#tv .br span{white-space:nowrap;font-size:.95vw;color:var(--muted);letter-spacing:.2em;text-transform:uppercase}'
-  + '#tv .bd{flex:1;display:flex;flex-direction:column;justify-content:center;gap:2.6vh}'
-  + '#tv .loc{font-size:1.15vw;color:var(--gold);letter-spacing:.14em;text-transform:uppercase;font-weight:600}'
-  + '#tv .ti{font-size:2.55vw;line-height:1.18;font-weight:600}#tv .pt{font-size:1.15vw;color:var(--muted)}'
+  + '#tv .bd{flex:1;display:flex;flex-direction:column;justify-content:center;gap:2.2vh}'
+  + '#tv .sub{font-size:1.15vw;color:var(--gold);opacity:.8;letter-spacing:.12em;text-transform:uppercase;font-weight:600;margin-top:-1vh}'
+  + '#tv .loc{font-size:3.4vw;line-height:1.05;color:var(--gold);letter-spacing:.02em;text-transform:uppercase;font-weight:800}'
+  + '#tv .ti{font-size:2.1vw;line-height:1.18;font-weight:600}#tv .pt{font-size:1.15vw;color:var(--muted)}'
   + '#tv .pr{font-size:4.1vw;font-weight:700;line-height:1}#tv .pr small{font-size:1.5vw;font-weight:500;color:var(--muted);margin-left:.4vw}'
   + '#tv .pr .cur{font-size:1.7vw;font-weight:600;color:var(--gold);margin-right:.6vw;vertical-align:.9vw;letter-spacing:.06em}'
   + '#tv .sp{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}'
@@ -82,12 +83,8 @@ var css = ''
   // ---------- slideshow ----------
   var queue = [], all = [], pos = -1, photoTimer = null, imgs = [];
   function buildQueue(){
-    var n = shuffle(all.filter(function(x){ return x.isNew; }));
-    var sale = shuffle(all.filter(function(x){ return !x.isNew && x.type === 'Sale'; }));
-    var rent = shuffle(all.filter(function(x){ return !x.isNew && x.type !== 'Sale'; }));
-    var rest = []; while (sale.length || rent.length){ if (rent.length) rest.push(rent.shift()); if (rent.length) rest.push(rent.shift()); if (sale.length) rest.push(sale.shift()); }
-    var half = Math.floor(rest.length/2);
-    queue = n.concat(rest.slice(0, half), shuffle(n.slice()), rest.slice(half));
+    // newest listings first, oldest last
+    queue = all.slice().sort(function(a,b){ return (b.since || 0) - (a.since || 0); });
     pos = -1;
   }
   var BROKER_EVERY = 3, slideNo = 0, brokers = [], bIdx = 0;
@@ -164,7 +161,9 @@ var css = ''
     $('tvag').innerHTML = x.agent ? ((x.avatar ? '<img class="av" src="' + esc(x.avatar) + '" alt="">' : '<div class="av ini">' + esc(ini) + '</div>')
       + '<div class="fd"><span>Listing agent</span><b>' + esc(x.agent) + '</b></div>') : '';
     var av = tv.querySelector('#tvag img.av'); if (av) av.onerror = function(){ av.outerHTML = '<div class="av ini">' + esc(ini) + '</div>'; };
-    $('tvbd').innerHTML = '<div class="loc fd">' + esc(x.loc) + '</div>'
+    var area = x.area || String(x.loc || '').split(' · ').pop();
+    var sub = String(x.loc || '').split(' · ').filter(function(p){ return p && p !== area; }).join(' · ');
+    $('tvbd').innerHTML = '<div class="loc fd">' + esc(area) + '</div>' + (sub ? '<div class="sub fd">' + esc(sub) + '</div>' : '')
       + '<div class="ti fd" style="animation-delay:.1s">' + esc(x.title) + '</div>'
       + '<div class="pt fd" style="animation-delay:.15s">' + esc(x.ptype || '') + '</div>'
       + '<div class="pr fd" style="animation-delay:.2s">' + priceHtml(x) + '</div>'
