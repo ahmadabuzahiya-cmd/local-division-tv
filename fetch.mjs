@@ -42,6 +42,7 @@ function map(p) {
     loc: parts.slice(0, 3).join(' · '),
     area: parts[parts.length - 1] || '',
     imgs: (p.images || []).slice(0, 4).map(i => String(i.medium || i.small || '').replace(/\/\d+x\d+\.(jpg|webp)/, '/1312x894.$1').replace(/\?.*$/, '')).filter(Boolean),
+    url: p.share_url || '',
     agent: (p.agent || {}).name || '',
     avatar: (p.agent || {}).image || '',
     since: p.listed_date || null,
