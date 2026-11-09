@@ -117,6 +117,14 @@
     + '.cl .t{font-size:13px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'
     + '.cl .m{font-size:12px;color:var(--text-2);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'
     + '.cl .d{font-size:12px;color:var(--text-3);margin-top:2px;font-variant-numeric:tabular-nums}'
+    // brochure: the primary action on the details screen; a small icon button on each card photo
+    + '.btn2{display:flex;align-items:center;justify-content:center;gap:var(--s-2);width:100%;margin-top:var(--s-6);padding:14px;border:0;border-radius:var(--r-md);background:var(--accent);color:var(--on-accent);font-weight:600;font-size:15px}'
+    + '.btn2 svg{width:18px;height:18px;flex:none}.btn2.busy{opacity:.7}.btn2.busy svg{animation:bob 1s ease-in-out infinite}'
+    + '.btn2+.btn{margin-top:var(--s-2);background:var(--surface-3);color:var(--text-1)}'
+    + '.dl{position:absolute;right:var(--s-3);top:var(--s-3);width:36px;height:36px;border:0;border-radius:50%;background:var(--scrim);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);color:var(--text-1);display:grid;place-items:center}'
+    + '.dl svg{width:18px;height:18px}.dl.busy svg{animation:bob 1s ease-in-out infinite}@keyframes bob{50%{transform:translateY(2px);opacity:.6}}'
+    + '.toast{position:fixed;left:50%;bottom:calc(var(--s-6) + env(safe-area-inset-bottom,0px));transform:translate(-50%,12px);z-index:30;max-width:calc(100% - 32px);padding:10px var(--s-4);border-radius:var(--r-md);background:var(--surface-4);color:var(--text-1);font-size:14px;box-shadow:0 8px 24px rgba(0,0,0,.4);opacity:0;pointer-events:none;transition:opacity .2s var(--ease),transform .2s var(--ease)}'
+    + '.toast.on{opacity:1;transform:translate(-50%,0)}'
     + '.btn{display:block;text-align:center;margin-top:var(--s-6);padding:14px;border-radius:var(--r-md);background:var(--accent);color:var(--on-accent);font-weight:600;text-decoration:none;font-size:15px}'
     + '.btn:active{background:var(--gold-400)}'
     // recently sold
@@ -231,7 +239,8 @@
     function card(x, i){
       var p = parts(x);
       return '<div class="card" data-ref="' + e(x.ref) + '"><div class="ph"><div class="strip">' + x.imgs.map(function(u, k){ return '<img loading="' + (i < 2 && k === 0 ? 'eager' : 'lazy') + '" decoding="async" src="' + e(sm(u)) + '" alt="">'; }).join('') + '</div>'
-        + '<div class="tags">' + tags(x) + '</div>' + (x.imgs.length > 1 ? '<div class="cnt">1 / ' + x.imgs.length + '</div>' : '') + '</div>'
+        + '<div class="tags">' + tags(x) + '</div>' + (x.imgs.length > 1 ? '<div class="cnt">1 / ' + x.imgs.length + '</div>' : '')
+        + '<button class="dl" data-ref="' + e(x.ref) + '" aria-label="Download PDF brochure">' + DL + '</button></div>'
         + '<div class="go" role="button" tabindex="0"><div class="body"><div class="kind">' + e(kind(x)) + '</div><div class="area">' + e(p.area) + '</div>' + (p.bld ? '<div class="bld">' + e(p.bld) + '</div>' : '')
         + '<div class="ttl">' + e(x.title) + '</div><div class="price">' + priceTxt(x) + '</div>'
         + (specs(x) ? '<div class="specs">' + specs(x) + '</div>' : '')
@@ -288,6 +297,7 @@
                   + (d ? '<div class="d">' + (d > 0 ? aed(d) + ' below ours' : aed(-d) + ' above ours') + '</div>' : '')
                   + '</div></a>';
               }).join('') + '</div></div>' : '')
+        + '<button class="btn2" data-ref="' + e(x.ref) + '">' + DL + '<span class="lb">Download brochure (PDF)</span></button>'
         + (x.url ? '<a class="btn" href="' + e(x.url) + '" target="_blank" rel="noopener">View on Property Finder</a>' : '')
         + '</div>';
       sheet.classList.add('open'); sheet.scrollTop = 0; document.body.style.overflow = 'hidden';
@@ -300,8 +310,184 @@
       if (pending){ pending = false; render(); }
     }
     window.addEventListener('popstate', closeDetail);
+
+    // ---------- PDF brochure (built in the browser; jsPDF and the QR library load only when first used) ----------
+    var scripts = {};
+    function loadScript(src){
+      return scripts[src] || (scripts[src] = new Promise(function(ok, no){
+        var s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = function(){ delete scripts[src]; no(new Error('script ' + src)); }; document.head.appendChild(s);
+      }));
+    }
+    var detailsP = null;
+    function loadDetails(){
+      return detailsP || (detailsP = fetch('details.json?t=' + Date.now(), {cache:'no-store'}).then(function(r){ return r.ok ? r.json() : {}; }).catch(function(){ detailsP = null; return {}; }));
+    }
+    // fetch as a blob, bypassing the HTTP cache: photos already on screen were cached from plain <img> loads
+    // without CORS headers, and reusing that copy makes the browser block the request
+    function loadImg(url){
+      return fetch(url, {mode:'cors', cache:'no-store', credentials:'omit'}).then(function(r){ if (!r.ok) throw new Error('img ' + r.status); return r.blob(); }).then(function(b){
+        return new Promise(function(ok, no){ var u = URL.createObjectURL(b), im = new Image(); im.onload = function(){ ok(im); setTimeout(function(){ URL.revokeObjectURL(u); }, 0); }; im.onerror = no; im.src = u; });
+      });
+    }
+    function svgImg(svg){
+      return new Promise(function(ok, no){ var im = new Image(); im.onload = function(){ ok(im); }; im.onerror = no; im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg); });
+    }
+    // crop an image to fill w x h (cover), returned as a JPEG/PNG data URL at print resolution
+    function cover(im, w, h, scale, png, round){
+      var c = document.createElement('canvas'); c.width = Math.round(w * scale); c.height = Math.round(h * scale);
+      var g = c.getContext('2d'), r = Math.max(c.width / im.width, c.height / im.height), dw = im.width * r, dh = im.height * r;
+      if (round){ g.beginPath(); g.arc(c.width / 2, c.height / 2, c.width / 2, 0, Math.PI * 2); g.clip(); }
+      g.drawImage(im, (c.width - dw) / 2, round ? 0 : (c.height - dh) / 2, dw, dh);
+      return c.toDataURL(png ? 'image/png' : 'image/jpeg', .86);
+    }
+    // jsPDF's built-in Helvetica only covers Latin-1: map smart punctuation, drop emoji and other scripts
+    function pdfText(s){
+      return String(s == null ? '' : s).replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[–—]/g, '-').replace(/…/g, '...')
+        .replace(/[•●▪‣⁃]/g, '-').replace(/[^\x09\x0A\x20-\x7E\xA0-\xFF]/g, '').replace(/[ \t]+/g, ' ').replace(/ *\n */g, '\n').trim();
+    }
+    function makeBrochure(x){
+      var JS = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', QR = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';
+      return Promise.all([loadScript(JS), loadScript(QR).catch(function(){}), loadDetails()]).then(function(r){
+        var det = (r[2] || {})[x.ref] || {};
+        var photos = (det.imgs && det.imgs.length ? det.imgs : x.imgs).slice(0, 4);
+        var safe = function(p){ return p.catch(function(){ return null; }); };
+        return Promise.all([
+          Promise.all(photos.map(function(u, i){ return safe(loadImg(i ? sm(u) : u)); })),
+          x.avatar ? safe(loadImg(x.avatar)) : null,
+          safe(svgImg(LOGO.replace('fill="currentColor"', 'fill="#f3efe6"').replace('<svg ', '<svg width="804" height="132" ')))
+        ]).then(function(im){ return drawBrochure(x, det, im[0], im[1], im[2]); });
+      });
+    }
+    function drawBrochure(x, det, photos, avatar, logo){
+      var doc = new window.jspdf.jsPDF({unit:'mm', format:'a4', compress:true});
+      var W = 210, M = 14, CW = W - 2 * M;
+      var NAVY = [14, 25, 37], GOLD = [168, 132, 63], INK = [29, 39, 51], GRAY = [93, 107, 121], PALE = [245, 242, 236], LINE = [226, 221, 211];
+      var col = function(c){ doc.setTextColor(c[0], c[1], c[2]); };
+      var fill = function(c){ doc.setFillColor(c[0], c[1], c[2]); };
+      var font = function(size, bold){ doc.setFont('helvetica', bold ? 'bold' : 'normal'); doc.setFontSize(size); };
+      var p = parts(x), sale = x.type === 'Sale';
+      var phone = det.phone ? String(det.phone).replace(/^\+971(\d{2})(\d{3})(\d{4})$/, '+971 $1 $2 $3') : '';
+
+      // header band
+      fill(NAVY); doc.rect(0, 0, W, 24, 'F');
+      if (logo) doc.addImage(cover(logo, 268, 44, 3, true), 'PNG', M, 8.5, 42.6, 7);
+      font(9); doc.setTextColor(167, 178, 190); doc.text('Local Division', W - M, 11, {align:'right'});
+      font(8); doc.text(pdfText('Ref ' + x.ref), W - M, 16.5, {align:'right'});
+
+      // photos: one hero and up to three below
+      var y = 30, heroH = 86;
+      fill(PALE);
+      if (photos[0]) doc.addImage(cover(photos[0], CW, heroH, 6), 'JPEG', M, y, CW, heroH); else doc.rect(M, y, CW, heroH, 'F');
+      if (x.isNew || x.level){ // the same two badges the app uses
+        var bx = M + 4;
+        if (x.isNew){ fill([198, 161, 91]); doc.roundedRect(bx, y + 4, 13, 6, 1, 1, 'F'); font(8, true); col(NAVY); doc.text('NEW', bx + 6.5, y + 8.2, {align:'center'}); bx += 15; }
+        if (x.level){ var lv = x.level === 'premium' ? 'PREMIUM' : 'FEATURED'; fill(NAVY); doc.roundedRect(bx, y + 4, 22, 6, 1, 1, 'F'); font(8, true); doc.setTextColor(243, 239, 230); doc.text(lv, bx + 11, y + 8.2, {align:'center'}); }
+      }
+      y += heroH + 3;
+      // the remaining photos share the row evenly, so a listing with fewer photos never shows an empty slot
+      var rest = photos.slice(1).filter(Boolean).slice(0, 3), th = 30;
+      if (rest.length){
+        var tw = (CW - 3 * (rest.length - 1)) / rest.length;
+        rest.forEach(function(im, i){ doc.addImage(cover(im, tw, th, 5), 'JPEG', M + i * (tw + 3), y, tw, th); });
+        y += th + 8;
+      } else y += 5;
+
+      // left column: what it is, price, key facts, description
+      var LX = M, LW = 118, RX = M + LW + 8, RW = CW - LW - 8, top = y;
+      font(8.5, true); col(GRAY); doc.text(pdfText((sale ? 'FOR SALE' : 'FOR RENT') + (x.ptype ? '  ·  ' + x.ptype.toUpperCase() : '')), LX, y); y += 7.5;
+      font(20, true); col(GOLD); doc.text(pdfText(p.area), LX, y); y += 6;
+      if (p.bld){ font(9.5); col(GRAY); var bl = doc.splitTextToSize(pdfText(p.bld), LW); doc.text(bl.slice(0, 2), LX, y); y += bl.slice(0, 2).length * 4.4 + 1.5; }
+      font(11.5, true); col(INK); var tl = doc.splitTextToSize(pdfText(x.title), LW).slice(0, 2); doc.text(tl, LX, y + 1.5); y += tl.length * 5.2 + 4.5;
+      font(20, true); col(NAVY);
+      var priceStr = x.por || !x.price ? 'Price on request' : 'AED ' + n0(x.price);
+      doc.text(pdfText(priceStr), LX, y + 2);
+      if (!sale && !(x.por || !x.price)){ var pw = doc.getTextWidth(pdfText(priceStr)); font(10); col(GRAY); doc.text('/ ' + (x.period || 'year'), LX + pw + 2, y + 2); }
+      y += 9;
+      // key facts strip
+      var facts = [];
+      facts.push([x.beds === 0 ? 'Studio' : x.beds == null ? '-' : String(x.beds), x.beds === 0 ? 'Bedroom' : 'Bedrooms']);
+      facts.push([x.baths == null ? '-' : String(x.baths), 'Bathrooms']);
+      facts.push([x.size ? n0(x.size) : '-', 'Sq ft built-up']);
+      if (det.plot && (!x.size || Math.abs(det.plot - x.size) > 5)) facts.push([n0(det.plot), 'Sq ft plot']);
+      fill(PALE); doc.roundedRect(LX, y, LW, 16, 1.5, 1.5, 'F');
+      var fw = LW / facts.length;
+      facts.forEach(function(f, k){ var fx = LX + k * fw + 4; font(12, true); col(INK); doc.text(pdfText(f[0]), fx, y + 7.2); font(7.5); col(GRAY); doc.text(f[1], fx, y + 12); });
+      y += 16 + 3.5;
+      var extra = [det.furn, det.status, x.ptype].filter(Boolean);
+      if (extra.length){ font(8.5); col(GRAY); doc.text(pdfText(extra.join('  ·  ')), LX, y + 1); y += 6; }
+      if (det.amen && det.amen.length){
+        y += 2; font(9.5, true); col(INK); doc.text('Features', LX, y); y += 4.8;
+        font(8.6); col([60, 70, 82]);
+        var fl = doc.splitTextToSize(pdfText(det.amen.join('  ·  ')), LW).slice(0, 3);
+        doc.text(fl, LX, y, {lineHeightFactor:1.28}); y += fl.length * 3.9 + 3;
+      }
+      // description fills what is left above the footer
+      var bottom = 272;
+      if (det.desc){
+        y += 2; font(9.5, true); col(INK); doc.text('About this property', LX, y); y += 5;
+        font(8.6); col([60, 70, 82]);
+        var lh = 3.9, room = Math.floor((bottom - y) / lh);
+        var lines = [];
+        pdfText(det.desc).split('\n').forEach(function(para){ lines = lines.concat(para ? doc.splitTextToSize(para, LW) : ['']); });
+        while (lines.length && !lines[0]) lines.shift();
+        if (lines.length > room){ lines = lines.slice(0, Math.max(room, 1)); lines[lines.length - 1] = lines[lines.length - 1].replace(/\s+\S*$/, '') + ' ...'; }
+        doc.text(lines, LX, y, {lineHeightFactor:1.28});
+      }
+
+      // right column: agent, QR to the online listing, amenities
+      var ry = top - 4;
+      fill(PALE); doc.roundedRect(RX, ry, RW, 46, 2, 2, 'F');
+      if (avatar) doc.addImage(cover(avatar, 20, 20, 8, true, true), 'PNG', RX + 5, ry + 5, 16, 16);
+      else { fill(LINE); doc.circle(RX + 13, ry + 13, 8, 'F'); font(10, true); col(GRAY); doc.text(pdfText((x.agent || '').split(/\s+/).map(function(w){ return w[0] || ''; }).slice(0, 2).join('').toUpperCase()), RX + 13, ry + 14.5, {align:'center'}); }
+      font(7.5); col(GRAY); doc.text('Your agent', RX + 5, ry + 27);
+      font(10.5, true); col(INK); var an = doc.splitTextToSize(pdfText(x.agent || 'Better Homes'), RW - 10).slice(0, 2); doc.text(an, RX + 5, ry + 32);
+      if (phone){ font(9.5, true); col(NAVY); doc.text(pdfText(phone), RX + 5, ry + 33 + an.length * 4.6); }
+      ry += 52;
+      if (x.url && window.qrcode){
+        var qr = window.qrcode(0, 'M'); qr.addData(x.url); qr.make();
+        var n = qr.getModuleCount(), qs = 30, cell = qs / n, qx = RX + (RW - qs) / 2;
+        fill(NAVY);
+        for (var rr = 0; rr < n; rr++) for (var cc = 0; cc < n; cc++) if (qr.isDark(rr, cc)) doc.rect(qx + cc * cell, ry + rr * cell, cell + .02, cell + .02, 'F');
+        font(7.5); col(GRAY); doc.text('Scan to view photos and details online', RX + RW / 2, ry + qs + 4.5, {align:'center', maxWidth:RW});
+        ry += qs + 11;
+      }
+
+      // footer
+      doc.setDrawColor(LINE[0], LINE[1], LINE[2]); doc.setLineWidth(.3); doc.line(M, 277, W - M, 277);
+      font(8, true); col(INK); doc.text('Better Homes - Local Division', M, 282);
+      font(7.5); col(GRAY);
+      var office = pdfText(det.office || 'Vision Tower, Business Bay, Dubai');
+      doc.text(doc.splitTextToSize(office + (phone ? '  ·  ' + phone : ''), CW - 60).slice(0, 1), M, 286);
+      var meta = ['Ref ' + x.ref, det.permit ? 'Permit ' + det.permit : '', 'Created ' + new Date().toLocaleDateString('en-GB', {day:'numeric', month:'short', year:'numeric', timeZone:'Asia/Dubai'})].filter(Boolean).join('  ·  ');
+      doc.text(pdfText(meta), W - M, 282, {align:'right'});
+      doc.text('Price and availability subject to change.', W - M, 286, {align:'right'});
+
+      var name = ('BetterHomes ' + p.area + ' ' + x.ref).replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') + '.pdf';
+      doc.setProperties({title: pdfText(p.area + ' - ' + x.title), subject: 'Property brochure', author: 'Better Homes - Local Division'});
+      return {doc: doc, name: name};
+    }
+    var toastEl = null, toastT = null;
+    function toast(msg){
+      if (!toastEl){ toastEl = document.createElement('div'); toastEl.className = 'toast'; toastEl.setAttribute('role', 'status'); document.body.appendChild(toastEl); }
+      toastEl.textContent = msg; toastEl.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(function(){ toastEl.classList.remove('on'); }, 3200);
+    }
+    var DL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>';
+    function brochure(ref, btn){
+      var x = L.filter(function(y){ return y.ref === ref; })[0]; if (!x || (btn && btn.classList.contains('busy'))) return;
+      var label = btn && btn.querySelector('.lb'), was = label ? label.textContent : '';
+      if (btn){ btn.classList.add('busy'); btn.setAttribute('aria-busy', 'true'); }
+      if (label) label.textContent = 'Preparing brochure…';
+      makeBrochure(x).then(function(r){
+        try { r.doc.save(r.name); toast('Brochure downloaded'); }
+        catch (er) { window.open(r.doc.output('bloburl'), '_blank'); }
+      }).catch(function(){ toast('Could not create the brochure. Check the connection and try again.'); })
+        .then(function(){ if (btn){ btn.classList.remove('busy'); btn.removeAttribute('aria-busy'); } if (label) label.textContent = was; });
+    }
+    sheet.addEventListener('click', function(ev){ var b = ev.target.closest('.btn2'); if (b) brochure(b.getAttribute('data-ref'), b); });
+
     // tapping a card opens its details (with the market check); the details screen links on to Property Finder
     main.addEventListener('click', function(ev){
+      var dl = ev.target.closest('.dl'); if (dl){ ev.stopPropagation(); brochure(dl.getAttribute('data-ref'), dl); return; }
       if (ev.target.closest('a[href]')) return; // rival rows open Property Finder directly
       var c = ev.target.closest('.card'); if (c) openDetail(c.getAttribute('data-ref'));
     });

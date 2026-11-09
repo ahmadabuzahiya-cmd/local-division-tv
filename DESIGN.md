@@ -35,6 +35,7 @@ All tokens live in `TOKENS` at the top of `app.js`, and both views start from it
 - **Icons:** one stroke family (2px, round caps), 16–18px.
 - **Motion:** short and purposeful (`--ease`, 200–300ms on the phone), and it respects `prefers-reduced-motion`.
 - **TV:** sizes in `vw`/`vh` so it scales to any screen; colours come from the same tokens through the aliases `--panel`, `--ink`, `--muted` and `--gold`.
+- **PDF brochure:** a print-friendly white A4 page using the same navy and gold, with gold darkened to `#a8843f` so it stays legible on paper. It's for clients, so it never includes market-check or competitor data. On the details screen it is the one gold (primary) button; "View on Property Finder" is secondary.
 
 ## Checklist before shipping a UI change
 

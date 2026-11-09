@@ -46,6 +46,18 @@ function map(p) {
     agent: (p.agent || {}).name || '',
     avatar: (p.agent || {}).image || '',
     since: p.listed_date || null,
+    // extra detail for the PDF brochure; moved to details.json below so data.json stays small
+    _det: {
+      desc: String(p.description || '').replace(/\r/g, '').replace(/\n{3,}/g, '\n\n').trim().slice(0, 2500),
+      amen: (p.amenity_names || []).slice(0, 16),
+      furn: p.furnished === 'YES' ? 'Furnished' : p.furnished === 'PARTLY' ? 'Partly furnished' : p.furnished === 'NO' ? 'Unfurnished' : '',
+      plot: p.plot_size ? Math.round(p.plot_size) : null,
+      status: p.completion_status === 'off_plan' ? 'Off-plan' : p.completion_status === 'completed' ? 'Ready' : '',
+      permit: (p.rera && (p.rera.number || p.rera)) || '',
+      phone: ((p.contact_options || []).find(c => c.type === 'phone') || {}).value || ((p.broker || {}).phone || ''),
+      office: (p.broker || {}).address || '',
+      imgs: (p.images || []).slice(0, 6).map(i => String(i.medium || i.small || '').replace(/\/\d+x\d+\.(jpg|webp)/, '/1312x894.$1').replace(/\?.*$/, '')).filter(Boolean)
+    },
     _cat: sale ? 1 : 2,
     _type: p.property_type_id,
     _locs: String((p.location || {}).path || '').split('.').filter(Boolean).reverse(),
@@ -137,7 +149,15 @@ for (const a of areas) {
   await sleep(800);
 }
 
-listings.forEach(x => { delete x._cat; delete x._type; delete x._locs; delete x._area; });
+// brochure details, keyed by reference, in their own file (only loaded when someone makes a brochure)
+const details = {};
+listings.forEach(x => { details[x.ref] = x._det; });
+const detailsJson = JSON.stringify(details);
+let prevDetails = null;
+try { if (existsSync('details.json')) prevDetails = readFileSync('details.json', 'utf8'); } catch (e) {}
+if (prevDetails !== detailsJson) { writeFileSync('details.json', detailsJson); console.log('Saved details for', listings.length, 'listings'); }
+
+listings.forEach(x => { delete x._cat; delete x._type; delete x._locs; delete x._area; delete x._det; });
 let prev = null;
 try { if (existsSync('data.json')) { const o = JSON.parse(readFileSync('data.json', 'utf8')); prev = JSON.stringify({ listings: o.listings, sold: o.sold }); } } catch (e) {}
 const payload = JSON.stringify({ listings, sold });
