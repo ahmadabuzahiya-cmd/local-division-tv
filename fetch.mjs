@@ -132,21 +132,30 @@ for (const x of listings) {
 const areaCount = {};
 listings.forEach(x => { if (x._area) areaCount[x._area] = (areaCount[x._area] || 0) + 1; });
 const areas = Object.keys(areaCount).sort((a, b) => areaCount[b] - areaCount[a]).slice(0, 10);
-const sold = [];
+// ---------- recent rentals (Ejari contracts) in the same areas ----------
+// price is the contract amount; months is the contract length, so a short contract is never read as a yearly rent
+const monthsBetween = (a, b) => { const s = Date.parse(a), e = Date.parse(b); return s && e && e > s ? Math.max(1, Math.round((e - s) / (30.44 * 864e5))) : null; };
+const sold = [], rented = [];
 for (const a of areas) {
   const slug = a.toLowerCase().replace(/[()]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-  try {
-    const pp = await nextData('https://www.propertyfinder.ae/en/transactions/sold/dubai/' + slug);
-    const T = ((pp.list || {}).transactionList || []).filter(t => t.price && t.transactionDate);
-    if (T.length) sold.push({
-      area: a,
-      items: T.slice(0, 6).map(t => ({
-        price: t.price, date: t.transactionDate, type: t.propertyType || '', beds: t.bedrooms,
-        size: Math.round(t.builtupArea || t.plotArea || 0) || null, place: t.locationName || ''
-      }))
-    });
-  } catch (e) { console.log('sold', a, e.message); }
-  await sleep(800);
+  for (const kind of ['sold', 'rented']) {
+    try {
+      const pp = await nextData('https://www.propertyfinder.ae/en/transactions/' + kind + '/dubai/' + slug);
+      const T = ((pp.list || {}).transactionList || []).filter(t => t.price && t.transactionDate && !t.isBulkTransaction);
+      if (T.length) (kind === 'sold' ? sold : rented).push({
+        area: a,
+        items: T.slice(0, 6).map(t => {
+          const item = {
+            price: t.price, date: t.transactionDate, type: t.propertyType || '', beds: t.bedrooms,
+            size: Math.round(t.builtupArea || t.plotArea || 0) || null, place: t.locationName || ''
+          };
+          if (kind === 'rented') { item.months = monthsBetween(t.contractStartDate, t.contractEndDate); item.status = /renew/i.test(t.status || '') ? 'Renewal' : 'New'; }
+          return item;
+        })
+      });
+    } catch (e) { console.log(kind, a, e.message); }
+    await sleep(800);
+  }
 }
 
 // brochure details, keyed by reference, in their own file (only loaded when someone makes a brochure)
@@ -159,11 +168,11 @@ if (prevDetails !== detailsJson) { writeFileSync('details.json', detailsJson); c
 
 listings.forEach(x => { delete x._cat; delete x._type; delete x._locs; delete x._area; delete x._det; });
 let prev = null;
-try { if (existsSync('data.json')) { const o = JSON.parse(readFileSync('data.json', 'utf8')); prev = JSON.stringify({ listings: o.listings, sold: o.sold }); } } catch (e) {}
-const payload = JSON.stringify({ listings, sold });
+try { if (existsSync('data.json')) { const o = JSON.parse(readFileSync('data.json', 'utf8')); prev = JSON.stringify({ listings: o.listings, sold: o.sold, rented: o.rented }); } } catch (e) {}
+const payload = JSON.stringify({ listings, sold, rented });
 if (prev === payload) {
   console.log('No change,', listings.length, 'listings');
 } else {
-  writeFileSync('data.json', JSON.stringify({ updated: new Date().toISOString(), listings, sold }));
-  console.log('Saved', listings.length, 'listings,', listings.filter(x => x.comp).length, 'market checks,', sold.length, 'sold areas');
+  writeFileSync('data.json', JSON.stringify({ updated: new Date().toISOString(), listings, sold, rented }));
+  console.log('Saved', listings.length, 'listings,', listings.filter(x => x.comp).length, 'market checks,', sold.length, 'sold areas,', rented.length, 'rented areas');
 }

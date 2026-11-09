@@ -45,7 +45,7 @@
     + '.top .logo svg{height:20px;width:auto;color:var(--text-1);display:block}'
     + '.top small{color:var(--text-3);font-size:13px}'
     + '.top .stats{color:var(--text-2);font-size:13px;margin-top:var(--s-2)}'
-    + '.tabs{display:grid;grid-template-columns:1fr 1fr;padding:3px;margin:var(--s-3) 0 var(--s-2);background:var(--surface-2);border-radius:var(--r-md)}'
+    + '.tabs{display:grid;grid-template-columns:repeat(3,1fr);padding:3px;margin:var(--s-3) 0 var(--s-2);background:var(--surface-2);border-radius:var(--r-md)}'
     + '.tabs button{padding:7px 0;border:0;border-radius:calc(var(--r-md) - 3px);background:transparent;color:var(--text-2);font-size:14px;font-weight:600;transition:background .2s var(--ease),color .2s var(--ease)}'
     + '.tabs button.on{background:var(--surface-4);color:var(--text-1)}'
     + '.search{width:100%;padding:10px var(--s-3);border:0;border-radius:var(--r-md);background:var(--surface-2);color:var(--text-1);font-size:16px}'
@@ -132,7 +132,7 @@
     + '.sold .a{background:var(--surface-1);border-radius:var(--r-lg);padding:var(--s-4) var(--s-4) var(--s-2)}'
     + '.sold h3{font-size:18px;color:var(--accent-text);font-weight:700;margin-bottom:var(--s-2)}'
     + '.sold .t{display:grid;grid-template-columns:1fr auto;gap:2px var(--s-3);padding:var(--s-3) 0;border-top:1px solid var(--line)}'
-    + '.sold .t b{font-size:14px;font-weight:500}.sold .t em{font-style:normal;font-weight:600;color:var(--text-1);text-align:right;font-variant-numeric:tabular-nums}.sold .t i,.sold .t u{font-style:normal;text-decoration:none;font-size:12px;color:var(--text-3)}.sold .t u{text-align:right}'
+    + '.sold .t b{font-size:14px;font-weight:500}.sold .t em{font-style:normal;font-weight:600;color:var(--text-1);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.sold .t em small{font-size:12px;font-weight:400;color:var(--text-2)}.sold .t i,.sold .t u{font-style:normal;text-decoration:none;font-size:12px;color:var(--text-3)}.sold .t u{text-align:right}'
     // states
     + '.empty{padding:var(--s-8) var(--s-4);text-align:center;color:var(--text-2)}'
     + '.retry{display:block;margin:var(--s-3) auto 0;padding:var(--s-2) var(--s-4);border:0;border-radius:var(--r-md);background:var(--surface-3);color:var(--text-1);font-size:14px;font-weight:600}'
@@ -148,7 +148,7 @@
     var app = document.createElement('div');
     app.innerHTML = '<div class="top"><div class="row1"><span class="logo">' + LOGO + '</span><small>Local Division</small></div>'
       + '<div class="stats" id="pstats">Loading…</div>'
-      + '<div class="tabs"><button class="on" data-tab="list">Listings</button><button data-tab="sold">Recently sold</button></div></div>'
+      + '<div class="tabs"><button class="on" data-tab="list">Listings</button><button data-tab="sold">Just sold</button><button data-tab="rented">Just rented</button></div></div>'
       + '<div class="bar" id="pfilters"><div class="srow"><input class="search" id="pq" type="search" enterkeyhint="search" placeholder="Search area or agent" autocomplete="off">'
       + '<label class="sort"><span class="vh">Sort by</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16M3 16l4 4 4-4M17 20V4M13 8l4-4 4 4"/></svg>'
       + '<select id="psort" aria-label="Sort by">'
@@ -157,7 +157,7 @@
       + '<div class="chips" id="pchips"><button class="on" data-f="all">All</button><button data-f="new">New</button><button data-f="paid">Premium & featured</button><button data-f="sale">For sale</button><button data-f="rent">For rent</button><button data-f="comp">Market check</button></div></div>'
       + '<div id="pmain"></div><div class="sheet" id="psheet"></div>';
     document.body.appendChild(app);
-    var L = [], SOLD = [], tab = 'list', filt = 'all', q = '', sortBy = 'rec', lastUpdated = null, shown = [], drawn = 0, BATCH = 15, io = null, sheetHist = false;
+    var L = [], SOLD = [], RENTED = [], tab = 'list', filt = 'all', q = '', sortBy = 'rec', lastUpdated = null, shown = [], drawn = 0, BATCH = 15, io = null, sheetHist = false;
     var main = document.getElementById('pmain'), sheet = document.getElementById('psheet');
     // phone cards use the smaller Property Finder image (about 1/3 the bytes) to keep memory low on mobile browsers
     var sm = function(u){ return String(u).replace('/1312x894.', '/668x452.'); };
@@ -179,17 +179,21 @@
     function rivals(x){ return x.comps && x.comps.length ? x.comps : x.comp ? [x.comp] : []; }
     function link(u){ return u ? ' href="' + e(u) + '" target="_blank" rel="noopener"' : ''; }
     function parts(x){ var a = x.area || String(x.loc || '').split(' · ').pop(); return {area:a, bld:String(x.loc || '').split(' · ').filter(function(p){ return p && p !== a; }).join(' · ')}; }
+    // a rental's price is the contract amount: "/ yr" for a 12-month contract, otherwise its real length
+    function rentTerm(t){ return !t.months || (t.months >= 11 && t.months <= 13) ? ' <small>/ yr</small>' : ' <small>· ' + t.months + '-month</small>'; }
     function render(){
       document.getElementById('pfilters').style.display = tab === 'list' ? '' : 'none';
       if (io) { io.disconnect(); io = null; }
-      if (tab === 'sold'){
-        main.innerHTML = SOLD.length ? '<div class="sold">' + SOLD.map(function(a){
+      if (tab === 'sold' || tab === 'rented'){
+        var rent = tab === 'rented', groups = rent ? RENTED : SOLD;
+        main.innerHTML = groups.length ? '<div class="sold">' + groups.map(function(a){
           return '<div class="a"><h3>' + e(a.area) + '</h3>' + a.items.map(function(t){
             var what = [t.type, t.beds ? t.beds + ' bed' : '', t.size ? n0(t.size) + ' sq ft' : ''].filter(Boolean).join(' · ');
             var d = new Date(t.date + 'T00:00:00+04:00').toLocaleDateString('en-GB', {day:'numeric', month:'short'});
-            return '<div class="t"><b>' + e(t.place || a.area) + '</b><em>' + aed(t.price) + '</em><i>' + e(what) + '</i><u>' + d + '</u></div>';
+            return '<div class="t"><b>' + e(t.place || a.area) + '</b><em>' + aed(t.price) + (rent ? rentTerm(t) : '') + '</em><i>' + e(what) + '</i>'
+              + '<u>' + (rent && t.status ? e(t.status) + ' · ' : '') + d + '</u></div>';
           }).join('') + '</div>';
-        }).join('') + '</div>' : '<div class="empty">No recent sales yet.</div>';
+        }).join('') + '</div>' : '<div class="empty">' + (rent ? 'No recent rentals yet.' : 'No recent sales yet.') + '</div>';
         return;
       }
       var ql = q.toLowerCase();
@@ -518,7 +522,7 @@
         if (!d || !Array.isArray(d.listings)) throw new Error('bad data');
         if (d.updated && d.updated === lastUpdated) return; // nothing new: keep the page as it is
         lastUpdated = d.updated;
-        SOLD = d.sold || [];
+        SOLD = d.sold || []; RENTED = d.rented || [];
         L = (d.listings || []).map(function(x){ x.since = Date.parse(x.since || 0) || 0; x.isNew = x.since && (Date.now() - x.since) < 7*864e5; return x; })
           .filter(function(x){ return x.imgs && x.imgs.length; })
           .sort(function(a,b){ var pa = a.level === 'premium' ? 2 : a.level === 'featured' ? 1 : 0, pb = b.level === 'premium' ? 2 : b.level === 'featured' ? 1 : 0; return (b.isNew - a.isNew) || (pb - pa) || (b.since - a.since); });
@@ -611,7 +615,7 @@ var css = TOKENS
   + '#tv .srow{display:grid;grid-template-columns:1fr auto;gap:.2vh 1vw;border-bottom:1px solid var(--line);padding-bottom:1.1vh}'
   + '#tv .srow b{font-size:1.35vw;font-weight:600}#tv .srow em{font-style:normal;font-size:1.6vw;font-weight:600;color:var(--text-1);text-align:right;font-variant-numeric:tabular-nums}'
   + '#tv .srow i{font-style:normal;font-size:1vw;color:var(--muted)}#tv .srow u{text-decoration:none;font-size:1vw;color:var(--muted);text-align:right}'
-  + '#tv .srow.top b{font-size:1.7vw}#tv .srow.top em{font-size:2.4vw;font-weight:700;color:var(--gold)}'
+  + '#tv .srow.top b{font-size:1.7vw}#tv .srow.top em{font-size:2.4vw;font-weight:700;color:var(--gold)}#tv .srow em small{font-size:1vw;font-weight:500;color:var(--muted)}'
   + '#tv .msg{position:absolute;inset:0;display:grid;place-items:center;font-size:2vw;color:var(--muted);background:var(--bg);z-index:5;text-align:center;padding:5vw}';
 
   
@@ -632,11 +636,11 @@ var css = TOKENS
   function isNew(t){ return t && (Date.now() - t) < NEW_DAYS*864e5; }
 
   // ---------- data (data.json is refreshed from Property Finder every 10 minutes) ----------
-  var status = {err:[]}, soldAreas = [], soldIdx = 0, SOLD_EVERY = 8;
+  var status = {err:[]}, soldAreas = [], soldIdx = 0, rentedAreas = [], rentedIdx = 0, SOLD_EVERY = 8;
   function load(){
     return fetch('data.json?t=' + Date.now(), {cache:'no-store'}).then(function(r){ if (!r.ok) throw new Error('data ' + r.status); return r.json(); })
       .then(function(d){
-        soldAreas = d.sold || [];
+        soldAreas = d.sold || []; rentedAreas = d.rented || [];
         return (d.listings || []).map(function(x){
           x.key = x.ref; x.since = Date.parse(x.since || 0) || 0; x.isNew = isNew(x.since); return x;
         }).filter(function(x){ return x.imgs && x.imgs.length; });
@@ -666,7 +670,11 @@ var css = TOKENS
     queue.forEach(function(x){
       out.push(x); n++;
       if (x.comp) out.push({kind:'comp', key:'comp:' + x.key, of:x});
-      if (soldAreas.length && n % SOLD_EVERY === 0){ out.push({kind:'sold', key:'sold:' + n}); }
+      // every few slides a market-activity slide, alternating just sold / just rented
+      if ((soldAreas.length || rentedAreas.length) && n % SOLD_EVERY === 0){
+        var rentTurn = rentedAreas.length && (!soldAreas.length || (n / SOLD_EVERY) % 2 === 0);
+        out.push({kind: rentTurn ? 'rented' : 'sold', key: (rentTurn ? 'rented:' : 'sold:') + n});
+      }
     });
     queue = out;
     pos = -1;
@@ -769,20 +777,24 @@ var css = TOKENS
     $('tvref').textContent = x.ref;
     startBar();
   }
-  function showSold(){
-    if (!soldAreas.length){ return show(); }
-    var a = soldAreas[soldIdx % soldAreas.length]; soldIdx++;
+  // "Just sold" and "Just rented" slides share one layout; a rental's price is its contract amount
+  function rentTermTv(t){ return !t.months || (t.months >= 11 && t.months <= 13) ? '<small> / yr</small>' : '<small> · ' + t.months + '-month</small>'; }
+  function showSold(rent){
+    var groups = rent ? rentedAreas : soldAreas;
+    if (!groups.length){ return rent ? showSold(false) : show(); }
+    var a = rent ? groups[rentedIdx++ % groups.length] : groups[soldIdx++ % groups.length];
     var mine = all.filter(function(x){ return x.area === a.area; }).map(function(x){ return x.imgs[0]; }).filter(Boolean);
     if (!mine.length) mine = all.slice(0,4).map(function(x){ return x.imgs[0]; });
     var top = a.items.slice().sort(function(p,q){ return q.price - p.price; })[0];
-    photosLeft(mine, 'Just sold in', a.area, top ? top.type + ' sold for ' + money(top.price) : '');
-    $('tvtags').innerHTML = '<div class="tg Sold">Recently sold</div>';
+    photosLeft(mine, rent ? 'Just rented in' : 'Just sold in', a.area, top ? top.type + (rent ? ' rented for ' : ' sold for ') + money(top.price) + (rent && (!top.months || top.months >= 11) ? ' a year' : '') : '');
+    $('tvtags').innerHTML = '<div class="tg Sold">' + (rent ? 'Just rented' : 'Just sold') + '</div>';
     $('tvag').innerHTML = ''; $('tvag').style.display = 'none';
     var fmt = function(d){ return new Date(d + 'T00:00:00+04:00').toLocaleDateString('en-GB', {day:'numeric', month:'short'}); };
-    $('tvbd').innerHTML = '<div class="loc fd">' + esc(a.area) + '</div><div class="sold fd"><h3>Latest sales · Property Finder transactions</h3>'
-      + a.items.slice(0,5).map(function(t, i){
+    $('tvbd').innerHTML = '<div class="loc fd">' + esc(a.area) + '</div><div class="sold fd"><h3>' + (rent ? 'Latest rentals · Property Finder transactions' : 'Latest sales · Property Finder transactions') + '</h3>'
+      + a.items.slice(0,5).map(function(t){
           var what = [t.type, t.beds ? t.beds + ' BR' : '', t.size ? num(t.size) + ' sq ft' : ''].filter(Boolean).join(' · ');
-          return '<div class="srow' + (t === top ? ' top' : '') + '"><b>' + esc(t.place || a.area) + '</b><em>' + money(t.price) + '</em><i>' + esc(what) + '</i><u>' + fmt(t.date) + '</u></div>';
+          return '<div class="srow' + (t === top ? ' top' : '') + '"><b>' + esc(t.place || a.area) + '</b><em>' + money(t.price) + (rent ? rentTermTv(t) : '') + '</em><i>' + esc(what) + '</i>'
+            + '<u>' + (rent && t.status ? esc(t.status) + ' · ' : '') + fmt(t.date) + '</u></div>';
         }).join('') + '</div>';
     $('tvref').textContent = '';
     startBar();
@@ -795,7 +807,7 @@ var css = TOKENS
     [].forEach.call(ph.querySelectorAll('.grid,.spot'), function(el){ el.remove(); });
     $('tvag').style.display = '';
     if (x.kind === 'comp'){ showComp(x.of); return; }
-    if (x.kind === 'sold'){ showSold(); return; }
+    if (x.kind === 'sold' || x.kind === 'rented'){ showSold(x.kind === 'rented'); return; }
     imgs = x.imgs.map(function(u){ var el = new Image(); el.onerror = function(){ el.dataset.bad = 1; }; el.src = u; ph.insertBefore(el, $('tvtags')); return el; });
     var dots = $('tvdots'); dots.innerHTML = x.imgs.map(function(){ return '<i></i>'; }).join('');
     var p = 0;
@@ -841,7 +853,7 @@ var css = TOKENS
         var seen = {}; queue.forEach(function(x){ if (!x.kind) seen[x.key] = 1; });
         var cur = queue[pos], curKey = cur ? cur.key : null;
         buildQueue();
-        var fresh = queue.filter(function(x){ var k = x.kind === 'comp' ? x.of.key : x.key; return x.kind !== 'sold' && !seen[k]; });
+        var fresh = queue.filter(function(x){ var k = x.kind === 'comp' ? x.of.key : x.key; return x.kind !== 'sold' && x.kind !== 'rented' && !seen[k]; });
         queue = queue.filter(function(x){ return fresh.indexOf(x) < 0; });
         pos = curKey ? queue.findIndex(function(x){ return x.key === curKey; }) : -1;
         queue.splice.apply(queue, [pos + 1, 0].concat(fresh));
