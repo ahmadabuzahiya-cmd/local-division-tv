@@ -44,7 +44,8 @@ function map(p) {
     imgs: (p.images || []).slice(0, 4).map(i => String(i.medium || i.small || '').replace(/\/\d+x\d+\.(jpg|webp)/, '/1312x894.$1').replace(/\?.*$/, '')).filter(Boolean),
     agent: (p.agent || {}).name || '',
     avatar: (p.agent || {}).image || '',
-    since: p.listed_date || null
+    since: p.listed_date || null,
+    level: p.listing_level === 'premium' || p.is_premium ? 'premium' : (p.listing_level === 'featured' || p.is_featured ? 'featured' : '')
   };
 }
 

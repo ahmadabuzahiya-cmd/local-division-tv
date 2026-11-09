@@ -13,7 +13,7 @@ var css = ''
   + '#tv .ph:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(11,22,34,0) 70%,rgba(11,22,34,.85) 100%),linear-gradient(0deg,rgba(0,0,0,.35) 0%,rgba(0,0,0,0) 25%)}'
   + '#tv .tags{position:absolute;top:3.5vh;left:3vw;z-index:2;display:flex;gap:.8vw}'
   + '#tv .tg{padding:.9vh 1.3vw;border-radius:3px;font-weight:700;letter-spacing:.18em;font-size:1.25vw}'
-  + '#tv .Sale{background:var(--gold);color:#0b1622}#tv .Rent{background:var(--rent);color:#fff}#tv .New{background:var(--new);color:#fff}'
+  + '#tv .Sale{background:var(--gold);color:#0b1622}#tv .Rent{background:var(--rent);color:#fff}#tv .New{background:var(--new);color:#fff}#tv .Prem{background:#6d3fc0;color:#fff}#tv .Feat{background:#fff;color:#0b1622}'
   + '#tv .dots{position:absolute;left:3vw;bottom:3vh;display:flex;gap:.6vw;z-index:2}'
   + '#tv .dots i{width:2.2vw;height:.45vh;background:rgba(255,255,255,.35);border-radius:2px}#tv .dots i.on{background:#fff}'
   + '#tv .in{position:relative;padding:5vh 3.2vw 4vh 2.6vw;display:flex;flex-direction:column;background:var(--panel)}'
@@ -165,7 +165,7 @@ var css = ''
       p = (p+1) % imgs.length;
     }
     step(); photoTimer = setInterval(step, SLIDE_MS / imgs.length);
-    $('tvtags').innerHTML = '<div class="tg ' + (x.type === 'Sale' ? 'Sale">FOR SALE' : 'Rent">FOR RENT') + '</div>' + (x.isNew ? '<div class="tg New">NEW</div>' : '');
+    $('tvtags').innerHTML = '<div class="tg ' + (x.type === 'Sale' ? 'Sale">FOR SALE' : 'Rent">FOR RENT') + '</div>' + (x.isNew ? '<div class="tg New">NEW</div>' : '') + (x.level === 'premium' ? '<div class="tg Prem">PREMIUM</div>' : x.level === 'featured' ? '<div class="tg Feat">FEATURED</div>' : '');
     var ini = (x.agent || '').split(/\s+/).filter(Boolean).map(function(w){ return w[0]; }).slice(0,2).join('').toUpperCase();
     $('tvag').innerHTML = x.agent ? ((x.avatar ? '<img class="av" src="' + esc(x.avatar) + '" alt="">' : '<div class="av ini">' + esc(ini) + '</div>')
       + '<div class="fd"><span>Listing agent</span><b>' + esc(x.agent) + '</b></div>') : '';
