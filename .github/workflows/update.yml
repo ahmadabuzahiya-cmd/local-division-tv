@@ -1,0 +1,41 @@
+name: Update listings
+
+# GitHub starts scheduled jobs only about once an hour, so each run
+# reads Property Finder 6 times, 10 minutes apart.
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-listings
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Read Property Finder every 10 minutes for an hour
+        run: |
+          git config user.name "listings-bot"
+          git config user.email "listings-bot@users.noreply.github.com"
+          for i in 1 2 3 4 5 6; do
+            git pull --rebase --quiet || true
+            node fetch.mjs || echo "Read failed, trying again next round"
+            git add data.json details.json
+            [ -f price-history.json ] && git add price-history.json
+            if git diff --cached --quiet; then
+              echo "No change"
+            else
+              git commit -m "Update listings" --quiet && git push --quiet || echo "Push failed"
+            fi
+            if [ "$i" -lt 6 ]; then sleep 540; fi
+          done
