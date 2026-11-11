@@ -32,7 +32,7 @@ It shows the Dubai time, fetches new data every 5 minutes, and reloads itself ev
 
 ### Phone
 
-- **Listings:** search by area, building or agent. Filters: New, Premium & featured, For sale, For rent, Market check. Sorting: Recommended, Newest, Lowest or highest price, Largest, Above market.
+- **Listings:** search by area, building or agent. Filters: New, Premium & featured, For sale, For rent, Market check, Price reduced. Sorting: Recommended, Newest, Lowest or highest price, Largest, Above market.
 - **Market check:** the three cheapest similar listings from other agencies, shown right on the card. Each opens on Property Finder.
 - **Listing details:** the photo gallery, facts and agent, the full market check (our price against up to 8 rivals, each clickable), **Download brochure (PDF)**, and **View on Property Finder**.
 - **Just sold** and **Just rented** tabs: recent transactions in the team's top 10 areas. A rental's price is the contract amount, labelled "/ yr" for a 12-month contract or with its real length (for example "2-month"), and marked New or Renewal.
@@ -75,15 +75,17 @@ There's no server, database or build step. It's a static site, plus a scheduled 
 | [`fetch.mjs`](fetch.mjs) | Collects the data from Property Finder (details below). Node 20+, no dependencies. |
 | [`data.json`](data.json) | Listings, market checks, and recent sales and rentals. **Generated; do not edit by hand.** |
 | [`details.json`](details.json) | Descriptions, features, furnishing, plot size and contact details, used only for brochures. **Generated.** |
-| [`.github/workflows/update.yml`](.github/workflows/update.yml) | Runs `fetch.mjs` every 10 minutes and commits the data when it changes. |
+| [`.github/workflows/update.yml`](.github/workflows/update.yml) | Runs `fetch.mjs` every 10 minutes and commits the data when it changes. GitHub only starts scheduled jobs about once an hour, so each hourly run reads Property Finder 6 times, 10 minutes apart. |
+| `price-history.json` | Each listing's last price, used for the Price reduced badge. **Generated.** |
 | [`DESIGN.md`](DESIGN.md) | The design system and the rules for the phone, TV and brochure. Read it before changing the look. |
 
 ### What `fetch.mjs` collects
 
 1. **Listings:** every sale and rent listing for the broker on Property Finder (`BROKER = 12158`).
-2. **Market check:** for listings published in the last 7 days, the 8 cheapest similar listings (same category, property type, area and bedrooms) from other agencies.
-3. **Just sold / Just rented:** the latest sale and rental transactions in the 10 areas where the team has the most listings.
-4. **Brochure details:** written to `details.json`, so `data.json`, which screens reload every 5 minutes, stays small.
+2. **Market check:** for listings published in the last 7 days, the 8 cheapest similar listings (same category, property type, area and bedrooms, and within 10% of our size) from other agencies.
+3. **Just sold / Just rented:** the latest sale and rental transactions (last 45 days) in the 10 areas where the team has the most listings, for the property type the team lists most in each area. If that type has none, it falls back to all types.
+4. **Price reduced:** `price-history.json` keeps each listing's last price. When a price drops, the listing shows **Price reduced** for 14 days, with the old price struck through.
+5. **Brochure details:** written to `details.json`, so `data.json`, which screens reload every 5 minutes, stays small.
 
 It writes the files only when something changed, so the history only records real updates.
 
@@ -135,7 +137,7 @@ To refresh the data right away, go to **Actions → Update listings → Run work
 ## Good to know
 
 - **The data source is unofficial.** It reads Property Finder's public website and the API behind it. There is no official feed or API key. If Property Finder changes their site, the update job will fail, the screens will keep showing the last good data, and the failed run will appear under **Actions**.
-- **Market checks are a guide.** "Similar" means the same category, property type, area and bedroom count. It doesn't compare condition, view, floor or furnishing.
+- **Market checks are a guide.** "Similar" means the same category, property type, area and bedroom count, within 10% of the size. It doesn't compare condition, view, floor or furnishing.
 - **Rental prices are contract amounts.** Short contracts are labelled with their length, so they aren't mistaken for a yearly rent.
 - **No permit numbers.** Property Finder's data doesn't include the permit number, so brochures don't show one.
 - **Photos load straight from Property Finder's image servers.**
