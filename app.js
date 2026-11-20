@@ -19,13 +19,16 @@
     + '--ease:cubic-bezier(.2,.7,.2,1)}'
     + '@media (prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}';
   // ---------- phone view: browse and tap for details ----------
-  var UA = navigator.userAgent || '';
-  // ?view=pc opens the same browse view as phones, laid out wide for a monitor. The TV is never auto-detected
-  // into this: auto stays phone-on-mobile / TV-elsewhere, so opening the bare or ?view=tv link still runs the slideshow.
-  var PC = /[?&]view=pc/.test(location.search);
-  var PHONE = PC || /[?&]view=phone/.test(location.search) || (!/[?&]view=tv/.test(location.search)
-    && (/iPhone|iPod|Windows Phone/i.test(UA) || (/Android/i.test(UA) && /Mobile/i.test(UA)))
-    && Math.min(screen.width, screen.height) < 600);
+  var UA = navigator.userAgent || '', qp = location.search;
+  // View routing:
+  //  ?view=tv  → slideshow;  ?view=pc → wide browse;  ?view=phone → narrow browse.
+  //  No param: the office TV runs Android TV (BrowseHere) — Android with no "Mobile" — so that stays the slideshow.
+  //  A real phone gets the narrow browse; any computer (Windows/Mac/Linux) gets the wide browse (the properties view).
+  var isPhone = /iPhone|iPod|Windows Phone/i.test(UA) || (/Android/i.test(UA) && /Mobile/i.test(UA));
+  var androidTV = /Android/i.test(UA) && !/Mobile/i.test(UA); // Android TV / big-screen Android
+  var TV = /[?&]view=tv/.test(qp) || (!/[?&]view=(pc|phone)/.test(qp) && androidTV);
+  var PHONE = !TV;                                   // the browse view runs for everything that isn't the slideshow
+  var PC = PHONE && (/[?&]view=pc/.test(qp) || !isPhone); // wide layout on computers and ?view=pc; narrow only on real phones
   // --- shared flags for the four alerts (market position, stale listing, inactive agent) ---
   var MKT_OVER = 0.25;   // red "price reduction required" when priced more than 25% above the cheapest rival
   var STALE_DAYS = 90;   // amber "remove or refresh" when live longer than this
