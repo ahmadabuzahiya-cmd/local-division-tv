@@ -185,7 +185,11 @@
     + 'body.pc .top{padding-top:var(--s-6)}body.pc .top .logo svg{height:26px}'
     + 'body.pc .list{grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:var(--s-4);padding:var(--s-4)}'
     + 'body.pc .sold{grid-template-columns:repeat(auto-fill,minmax(360px,1fr));align-items:start;padding:var(--s-4)}'
-    + 'body.pc .empty{padding:var(--s-8)}';
+    + 'body.pc .empty{padding:var(--s-8)}'
+    // on a computer the details view is a centred column, not full-width, so the photo isn\'t huge
+    + 'body.pc .sheet{padding:var(--s-6) 0}'
+    + 'body.pc .gal{max-width:720px;margin:0 auto;border-radius:14px}body.pc .gal img{aspect-ratio:16/10}'
+    + 'body.pc .det{max-width:720px;margin:0 auto;padding-left:0;padding-right:0}';
     var pst = document.createElement('style'); pst.textContent = pcss; document.head.appendChild(pst);
     document.title = 'BetterHomes Local Division · Live stock';
     var e = function(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); };
