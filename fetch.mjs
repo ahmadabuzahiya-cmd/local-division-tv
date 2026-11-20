@@ -216,6 +216,36 @@ listings.forEach(x => {
 const histJson = JSON.stringify(histNext);
 if (JSON.stringify(hist) !== histJson) writeFileSync('price-history.json', histJson);
 
+// ---------- full photo galleries: every image from each listing's page, cached so each is fetched once ----------
+const GAL_PER_RUN = 60;   // cap new gallery fetches per run so the hourly job stays in budget; the rest fill on later runs
+const IMG_BASE = 'https://static.shared.propertyfinder.ae/media/images/listing/';
+let gal = {};
+try { if (existsSync('gallery.json')) gal = JSON.parse(readFileSync('gallery.json', 'utf8')); } catch (e) {}
+let galNew = 0;
+for (const x of listings) {
+  if (gal[x.ref] && gal[x.ref].length) { x.imgs = gal[x.ref]; continue; } // use the cached full gallery
+  if (galNew >= GAL_PER_RUN || !x.url) continue;                           // keep the 3 preview images until a later run fills this one
+  galNew++;
+  try {
+    const r = await fetch(x.url, { headers: { ...HEADERS, accept: 'text/html' } });
+    if (r.ok) {
+      const html = await r.text();
+      const re = /media\/images\/listing\/([A-Z0-9]+)\/([0-9a-f-]{36})\/\d+x\d+\.(?:jpg|webp)/g;
+      const seenImg = new Set(), full = [];
+      let m; while ((m = re.exec(html))) { const k = m[1] + '/' + m[2]; if (!seenImg.has(k)) { seenImg.add(k); full.push(IMG_BASE + k + '/1312x894.jpg'); } }
+      if (full.length) { gal[x.ref] = full; x.imgs = full; }
+    }
+  } catch (e) { console.log('gallery', x.ref, e.message); }
+  await sleep(600);
+}
+// drop galleries for listings no longer live, then persist
+const liveSet = new Set(listings.map(x => x.ref));
+Object.keys(gal).forEach(r => { if (!liveSet.has(r)) delete gal[r]; });
+const galJson = JSON.stringify(gal);
+let prevGal = null;
+try { if (existsSync('gallery.json')) prevGal = readFileSync('gallery.json', 'utf8'); } catch (e) {}
+if (prevGal !== galJson) writeFileSync('gallery.json', galJson);
+
 // brochure details, keyed by reference, in their own file (only loaded when someone makes a brochure)
 const details = {};
 listings.forEach(x => { details[x.ref] = x._det; });

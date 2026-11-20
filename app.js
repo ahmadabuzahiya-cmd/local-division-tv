@@ -131,6 +131,9 @@
     + '.sheet.open{display:block;animation:sheetin .28s var(--ease)}@keyframes sheetin{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}'
     + '.gal{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;background:var(--surface-2)}.gal::-webkit-scrollbar{display:none}'
     + '.gal img{flex:none;width:100%;aspect-ratio:4/3;object-fit:cover;scroll-snap-align:start}'
+    + '.galwrap{position:relative}'
+    + '.gnav{position:absolute;top:50%;transform:translateY(-50%);width:42px;height:42px;border:0;border-radius:50%;background:rgba(0,0,0,.45);color:#fff;font-size:26px;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2}.gnav:active{background:rgba(0,0,0,.7)}.gprev{left:10px}.gnext{right:10px}'
+    + '.gcount{position:absolute;right:12px;bottom:12px;background:rgba(0,0,0,.6);color:#fff;font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px;z-index:2}'
     + '.close{position:fixed;top:calc(var(--s-3) + env(safe-area-inset-top,0px));right:var(--s-3);z-index:21;width:40px;height:40px;border-radius:50%;border:0;background:var(--scrim);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);color:var(--text-1);display:grid;place-items:center}'
     + '.close svg{width:18px;height:18px}'
     + '.det{padding:var(--s-4) var(--s-4) var(--s-6)}'
@@ -181,14 +184,20 @@
     + '.sk{background:var(--surface-1);border-radius:var(--r-lg);overflow:hidden}.sk i{display:block;background:var(--surface-2);border-radius:var(--r-sm);animation:skp 1.4s ease-in-out infinite}'
     + '.sk .p{aspect-ratio:3/2;border-radius:0}.sk .b{padding:var(--s-4);display:grid;gap:var(--s-2)}@keyframes skp{50%{opacity:.55}}'
     // ?view=pc: the same browse view, widened for a monitor. Cards flow into a responsive grid; the TV is untouched.
-    + 'body.pc .top,body.pc .bar,body.pc #pmain{max-width:1200px;margin-left:auto;margin-right:auto;width:100%}'
-    + 'body.pc .top{padding-top:var(--s-6)}body.pc .top .logo svg{height:26px}'
+    + 'body.pc .bar,body.pc #pmain{max-width:1200px;margin-left:auto;margin-right:auto;width:100%}'
+    // global desktop navigation bar: full-width sticky header with logo, tabs and the live count
+    + 'body.pc .top{position:sticky;top:0;z-index:30;max-width:none;width:100%;margin:0;padding:var(--s-3) var(--s-5);background:var(--surface-1);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:var(--s-5)}'
+    + 'body.pc .top .row1{display:flex;align-items:center;gap:10px;margin:0;flex:none}body.pc .top .logo svg{height:22px}body.pc .top .logo em{display:none}'
+    + 'body.pc .top small{color:var(--text-3);font-weight:600;font-size:13px}'
+    + 'body.pc .top .tabs{order:2;margin:0;width:auto;flex:none}'
+    + 'body.pc .top .stats{order:3;margin:0 0 0 auto;flex:none;font-size:13px;color:var(--text-3)}'
+    + 'body.pc .bar{top:57px;z-index:20}'
     + 'body.pc .list{grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:var(--s-4);padding:var(--s-4)}'
     + 'body.pc .sold{grid-template-columns:repeat(auto-fill,minmax(360px,1fr));align-items:start;padding:var(--s-4)}'
     + 'body.pc .empty{padding:var(--s-8)}'
     // on a computer the details view is a centred column, not full-width, so the photo isn\'t huge
     + 'body.pc .sheet{padding:var(--s-6) 0}'
-    + 'body.pc .gal{max-width:720px;margin:0 auto;border-radius:14px}body.pc .gal img{aspect-ratio:16/10}'
+    + 'body.pc .galwrap{max-width:720px;margin:0 auto}body.pc .gal{border-radius:14px}body.pc .gal img{aspect-ratio:16/10}'
     + 'body.pc .det{max-width:720px;margin:0 auto;padding-left:0;padding-right:0}';
     var pst = document.createElement('style'); pst.textContent = pcss; document.head.appendChild(pst);
     document.title = 'BetterHomes Local Division · Live stock';
@@ -204,7 +213,7 @@
       + '<div class="bar" id="pfilters"><div class="srow"><input class="search" id="pq" type="search" enterkeyhint="search" placeholder="Search area or agent" autocomplete="off">'
       + '<label class="sort"><span class="vh">Sort by</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16M3 16l4 4 4-4M17 20V4M13 8l4-4 4 4"/></svg>'
       + '<select id="psort" aria-label="Sort by">'
-      + '<option value="rec">Recommended</option><option value="new">Newest</option><option value="plo">Lowest price</option><option value="phi">Highest price</option><option value="big">Largest</option><option value="gap">Above market</option>'
+      + '<option value="rec">Recommended</option><option value="new">Newest</option><option value="hot">Below market (HOT)</option><option value="over">Needs price cut</option><option value="drop">Price reduced</option><option value="old">Longest listed</option><option value="plo">Lowest price</option><option value="phi">Highest price</option><option value="big">Largest</option><option value="gap">Above market</option>'
       + '</select></label></div>'
       + '<div class="chips" id="pchips"><button class="on" data-f="all">All</button><button data-f="new">New</button><button data-f="paid">Premium & featured</button><button data-f="sale">For sale</button><button data-f="rent">For rent</button><button data-f="comp">Market check</button><button data-f="drop">Price reduced</button></div></div>'
       + '<div id="pmain"></div><div class="sheet" id="psheet"></div>';
@@ -293,12 +302,18 @@
     function priceOf(x){ return !x.por && x.price ? x.price : null; }
     function gapOf(x){ var p = priceOf(x); return p && x.comp && x.comp.price ? p - x.comp.price : null; }
     function byNum(get, dir){ return function(a, b){ var va = get(a), vb = get(b); if (va == null && vb == null) return 0; if (va == null) return 1; if (vb == null) return -1; return dir * (va - vb); }; }
+    function dropAmt(x){ return x.drop && x.drop.was > x.price ? x.drop.was - x.price : null; }
     var SORTS = {
       new: function(a, b){ return (b.since || 0) - (a.since || 0); },
       plo: byNum(priceOf, 1),
       phi: byNum(priceOf, -1),
       big: byNum(function(x){ return x.size || null; }, -1),
-      gap: byNum(gapOf, -1)
+      gap: byNum(gapOf, -1),
+      // attention sorts: bring the flagged listings to the top
+      hot: function(a, b){ return ((b.mkt === 'hot') - (a.mkt === 'hot')) || ((gapOf(a) == null ? 0 : gapOf(a)) - (gapOf(b) == null ? 0 : gapOf(b))); },
+      over: function(a, b){ return ((b.mkt === 'over') - (a.mkt === 'over')) || ((gapOf(b) == null ? -1e18 : gapOf(b)) - (gapOf(a) == null ? -1e18 : gapOf(a))); },
+      drop: function(a, b){ return ((b.drop ? 1 : 0) - (a.drop ? 1 : 0)) || ((dropAmt(b) || 0) - (dropAmt(a) || 0)); },
+      old: function(a, b){ return (b.dLive || 0) - (a.dLive || 0); }
     };
     function sortItems(items){
       var f = SORTS[sortBy]; if (!f) return items;
@@ -307,8 +322,9 @@
     }
     function card(x, i){
       var p = parts(x);
-      return '<div class="card" data-ref="' + e(x.ref) + '"><div class="ph"><div class="strip">' + x.imgs.map(function(u, k){ return '<img loading="' + (i < 2 && k === 0 ? 'eager' : 'lazy') + '" decoding="async" src="' + e(sm(u)) + '" alt="">'; }).join('') + '</div>'
-        + '<div class="tags">' + tags(x) + '</div>' + (x.imgs.length > 1 ? '<div class="cnt">1 / ' + x.imgs.length + '</div>' : '')
+      var cimgs = x.imgs.slice(0, 6); // the card previews a few; the full gallery is on the details view
+      return '<div class="card" data-ref="' + e(x.ref) + '"><div class="ph"><div class="strip">' + cimgs.map(function(u, k){ return '<img loading="' + (i < 2 && k === 0 ? 'eager' : 'lazy') + '" decoding="async" src="' + e(sm(u)) + '" alt="">'; }).join('') + '</div>'
+        + '<div class="tags">' + tags(x) + '</div>' + (cimgs.length > 1 ? '<div class="cnt">1 / ' + cimgs.length + '</div>' : '')
         + '<button class="dl" data-ref="' + e(x.ref) + '" aria-label="Download PDF brochure">' + DL + '</button></div>'
         + '<div class="go" role="button" tabindex="0"><div class="body"><div class="kind">' + e(kind(x)) + '</div><div class="area">' + e(p.area) + '</div>' + (p.bld ? '<div class="bld">' + e(p.bld) + '</div>' : '')
         + '<div class="ttl">' + e(x.title) + '</div><div class="price">' + priceTxt(x) + '</div>'
@@ -359,7 +375,9 @@
       var verdict = diff == null ? '' : diff > 0 ? '<div class="verdict neg">' + aed(diff) + ' above the cheapest</div>'
         : diff < 0 ? '<div class="verdict pos">Cheapest on the market, ' + aed(-diff) + ' below the next</div>' : '<div class="verdict">Same price as the cheapest</div>';
       sheet.innerHTML = '<button class="close" id="pclose" aria-label="Close">' + CLOSE + '</button>'
-        + '<div class="gal">' + x.imgs.map(function(u, k){ return '<img loading="' + (k ? 'lazy' : 'eager') + '" decoding="async" src="' + e(u) + '" alt="">'; }).join('') + '</div>'
+        + '<div class="galwrap"><div class="gal" id="pgal">' + x.imgs.map(function(u, k){ return '<img loading="' + (k ? 'lazy' : 'eager') + '" decoding="async" src="' + e(u) + '" alt="">'; }).join('') + '</div>'
+        + (x.imgs.length > 1 ? '<button class="gnav gprev" id="pgprev" aria-label="Previous photo">‹</button><button class="gnav gnext" id="pgnext" aria-label="Next photo">›</button><div class="gcount" id="pgcount">1 / ' + x.imgs.length + '</div>' : '')
+        + '</div>'
         + '<div class="det">' + (tags(x) ? '<div class="tags">' + tags(x) + '</div>' : '')
         + '<div class="kind">' + e(kind(x)) + '</div><div class="area">' + e(p.area) + '</div>' + (p.bld ? '<div class="bld">' + e(p.bld) + '</div>' : '')
         + '<div class="ttl">' + e(x.title) + '</div><div class="price">' + priceTxt(x) + '</div>'
@@ -387,8 +405,21 @@
         + (x.url ? '<a class="btn" href="' + e(x.url) + '" target="_blank" rel="noopener">View on Property Finder</a>' : '')
         + '</div>';
       sheet.classList.add('open'); sheet.scrollTop = 0; document.body.style.overflow = 'hidden';
+      wireGallery(x.imgs.length);
       document.getElementById('pclose').onclick = function(){ if (sheetHist) history.back(); else closeDetail(); };
       if (!sheetHist){ try { history.pushState({d:1}, ''); sheetHist = true; } catch (er) {} }
+    }
+    // step through all photos on the detail view (arrows for PC/mouse, swipe still works on phones)
+    function wireGallery(n){
+      if (n <= 1) return;
+      var gal = document.getElementById('pgal'), cnt = document.getElementById('pgcount');
+      var prev = document.getElementById('pgprev'), next = document.getElementById('pgnext');
+      if (!gal) return;
+      function idx(){ return Math.round(gal.scrollLeft / gal.clientWidth); }
+      function go(d){ var i = Math.max(0, Math.min(n - 1, idx() + d)); gal.scrollTo({ left: i * gal.clientWidth, behavior: 'smooth' }); }
+      if (prev) prev.onclick = function(){ go(-1); };
+      if (next) next.onclick = function(){ go(1); };
+      gal.onscroll = function(){ if (cnt) cnt.textContent = (idx() + 1) + ' / ' + n; };
     }
     function closeDetail(){
       sheetHist = false; sheet.classList.remove('open'); document.body.style.overflow = '';
