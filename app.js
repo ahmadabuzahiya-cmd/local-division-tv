@@ -235,8 +235,7 @@
     // red banner naming agents with no new listing in the last 7 days
     function coldBanner(){
       if (!coldList.length) return '';
-      var top = coldList.slice(0, 6), extra = coldList.length - top.length;
-      var names = top.map(function(a){ return e(a.name) + ' (' + a.days + 'd)'; }).join(', ') + (extra > 0 ? ' +' + extra + ' more' : '');
+      var names = coldList.map(function(a){ return e(a.name) + ' (' + a.days + 'd)'; }).join(', ');
       return '<div class="coldbar"><b>⚠ Needs to be more active</b><span>No new listing in 7+ days: ' + names + '</span></div>';
     }
     function render(){
@@ -648,15 +647,18 @@ var css = TOKENS
   // one accent: only New is gold; sale/rent, tier, market check and sold are neutral labels
   + '#tv .New{background:var(--accent);color:var(--on-accent)}#tv .Prem,#tv .Feat{background:var(--tier)}'
   + '#tv .Hot{background:#1f9d57;color:#fff}#tv .Over{background:#c0392b;color:#fff}#tv .Stale{background:#d08700;color:#fff}'
-  // coloured market / stale line under the price
-  + '#tv .tvflag{font-size:var(--t-sm);font-weight:700;margin-top:1vh;letter-spacing:.01em}#tv .tvflag.hot{color:#2fd27f}#tv .tvflag.over{color:#ff6f5e}#tv .tvflag.stale{color:#f5b942}'
-  // full-screen red "needs to be more active" slide
-  + '#tv.alert,#tv.alert #tvph,#tv.alert .in{background:#b3261e}'
-  + '#tv .coldtv{display:flex;flex-direction:column;justify-content:center;height:100%;color:#fff;gap:1.4vh}'
-  + '#tv .coldtv .warn{font-size:9vw;line-height:1}#tv .coldtv h2{font-family:var(--serif);font-size:5.2vw;font-weight:400;line-height:1}'
+  // the price-comparison line and the stale line under the price
+  + '#tv .tvcomp{font-size:var(--t-sm);font-weight:500;color:var(--muted);margin-top:1vh}#tv .tvcomp b{color:var(--text-1);font-weight:700}#tv .tvcomp em{font-style:normal;font-weight:700}#tv .tvcomp .hot{color:#2fd27f}#tv .tvcomp .over{color:#ff6f5e}'
+  + '#tv .tvflag{font-size:var(--t-sm);font-weight:700;margin-top:.8vh;letter-spacing:.01em}#tv .tvflag.stale{color:#f5b942}'
+  // full-screen red "needs to be more active" slide — full width, every idle agent listed
+  + '#tv.alert{grid-template-columns:1fr}#tv.alert .ph{display:none}#tv.alert,#tv.alert .in{background:#b3261e}'
+  + '#tv .coldtv{display:flex;flex-direction:column;justify-content:center;height:100%;color:#fff;gap:1.1vh}'
+  + '#tv .coldtv .warn{font-size:5.5vw;line-height:1}#tv .coldtv h2{font-family:var(--serif);font-size:4.2vw;font-weight:400;line-height:1}'
   + '#tv .coldtv p{font-size:var(--t-md);opacity:.9;margin-bottom:1vh}'
-  + '#tv .coldtv .clist{display:flex;flex-direction:column;gap:1vh}#tv .coldtv .crow{display:flex;justify-content:space-between;align-items:baseline;gap:2vw;border-top:.15vh solid rgba(255,255,255,.3);padding-top:1vh}'
-  + '#tv .coldtv .crow b{font-size:var(--t-lg);font-weight:600}#tv .coldtv .crow span{font-size:var(--t-sm);opacity:.9;white-space:nowrap}'
+  + '#tv .coldtv .clist{display:grid;grid-template-columns:repeat(2,1fr);gap:.7vh 4vw}#tv .coldtv.many .clist{grid-template-columns:repeat(3,1fr);gap:.5vh 2.6vw}'
+  + '#tv .coldtv .crow{display:flex;justify-content:space-between;align-items:baseline;gap:1.2vw;border-top:.15vh solid rgba(255,255,255,.3);padding-top:.7vh}'
+  + '#tv .coldtv .crow b{font-size:var(--t-md);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#tv .coldtv .crow span{font-size:var(--t-sm);opacity:.85;white-space:nowrap}'
+  + '#tv .coldtv.many .crow b{font-size:var(--t-sm)}#tv .coldtv.many .crow span{font-size:var(--t-xs)}'
   + '#tv .dots{position:absolute;left:var(--safe-x);bottom:var(--safe-y);display:flex;gap:.6vw;z-index:2}'
   + '#tv .dots i{width:2.6vw;height:.6vh;background:rgba(255,255,255,.35);border-radius:2px}#tv .dots i.on{background:#fff}'
   + '#tv .in{position:relative;padding:var(--safe-y) var(--safe-x) var(--safe-y) 3.2vw;display:flex;flex-direction:column;background:var(--panel)}'
@@ -771,18 +773,15 @@ var css = TOKENS
     var out = [], n = 0;
     order.forEach(function(x){
       out.push(x); n++;
-      if (x.comp) out.push({kind:'comp', key:'comp:' + x.key, of:x});
+      // the price comparison now shows on the listing slide itself; the market report (just sold / rented) stays its own slide
       // every few slides a market-activity slide, alternating just sold / just rented
       if ((soldAreas.length || rentedAreas.length) && n % SOLD_EVERY === 0){
         var rentTurn = rentedAreas.length && (!soldAreas.length || (n / SOLD_EVERY) % 2 === 0);
         out.push({kind: rentTurn ? 'rented' : 'sold', key: (rentTurn ? 'rented:' : 'sold:') + n});
       }
     });
-    // a prominent "needs to be more active" slide at the start of each round, and again mid-round
-    if (coldAgents.length){
-      out.unshift({kind:'cold', key:'cold:a'});
-      if (out.length > 22) out.splice(Math.floor(out.length / 2), 0, {kind:'cold', key:'cold:b'});
-    }
+    // one prominent "needs to be more active" slide at the start of each round, listing every idle agent
+    if (coldAgents.length) out.unshift({kind:'cold', key:'cold:a'});
     queue = out;
     pos = -1;
   }
@@ -871,24 +870,28 @@ var css = TOKENS
     var bar = $('tvbar'); bar.style.transition = 'none'; bar.style.width = '0'; void bar.offsetWidth;
     bar.style.transition = 'width ' + SLIDE_MS + 'ms linear'; bar.style.width = '100%';
   }
-  // coloured market / stale message under the price on a listing slide
+  // the price comparison, shown on the listing slide itself, plus the stale note
   function tvFlagLine(x){
     var s = '';
-    if (x.mkt === 'hot') s += '<div class="tvflag hot fd" style="animation-delay:.28s">▲ Below market — HOT</div>';
-    else if (x.mkt === 'over'){ var pct = Math.round((x.price / x.comp.price - 1) * 100); s += '<div class="tvflag over fd" style="animation-delay:.28s">▼ ' + pct + '% above market · price reduction required</div>'; }
+    if (x.comp && x.comp.price && !x.por && x.price){
+      var pct = Math.round((x.price / x.comp.price - 1) * 100), pos;
+      if (x.price < x.comp.price) pos = '<em class="hot">we’re the cheapest — HOT</em>';
+      else if (pct > 25) pos = '<em class="over">' + pct + '% above — price reduction required</em>';
+      else pos = (pct > 0 ? pct + '% above the cheapest' : 'in line with the cheapest');
+      s += '<div class="tvcomp fd" style="animation-delay:.26s">Cheapest similar elsewhere <b>' + money(x.comp.price) + '</b> · ' + pos + '</div>';
+    }
     if (x.stale) s += '<div class="tvflag stale fd" style="animation-delay:.3s">⏱ Live ' + x.dLive + ' days · remove or refresh</div>';
     return s;
   }
-  // full-screen red slide naming agents with no new listing in the last 7 days
+  // full-screen red slide naming every agent with no new listing in the last 7 days
   function showCold(){
     if (!coldAgents.length) return show();
     tv.classList.add('alert');
     $('tvtags').innerHTML = ''; $('tvag').innerHTML = ''; $('tvag').style.display = 'none'; $('tvref').textContent = '';
-    var top = coldAgents.slice(0, 6), extra = coldAgents.length - top.length;
-    var rows = top.map(function(a){ return '<div class="crow"><b>' + esc(a.name) + '</b><span>' + a.days + ' days since last listing</span></div>'; }).join('')
-      + (extra > 0 ? '<div class="crow"><b>+' + extra + ' more</b><span></span></div>' : '');
-    $('tvbd').innerHTML = '<div class="coldtv fd"><div class="warn">⚠</div><h2>Needs to be more active</h2>'
-      + '<p>No new listing in the last 7 days</p><div class="clist">' + rows + '</div></div>';
+    var many = coldAgents.length > 9;
+    var rows = coldAgents.map(function(a){ return '<div class="crow"><b>' + esc(a.name) + '</b><span>' + a.days + 'd</span></div>'; }).join('');
+    $('tvbd').innerHTML = '<div class="coldtv' + (many ? ' many' : '') + ' fd"><div class="warn">⚠</div><h2>Needs to be more active</h2>'
+      + '<p>No new listing in the last 7 days · ' + coldAgents.length + ' agents</p><div class="clist">' + rows + '</div></div>';
     startBar();
   }
   function showComp(x){
