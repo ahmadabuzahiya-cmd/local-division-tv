@@ -127,7 +127,7 @@
     + '.rv a b{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}.rv a span{font-size:12px;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rv a em{font-style:normal;color:var(--text-3);font-size:12px;text-align:right}'
     + '.rv .all{font-size:12px;color:var(--text-3);padding:var(--s-2) 0;border-top:1px solid var(--line)}'
     // details sheet
-    + '.sheet{position:fixed;inset:0;z-index:20;background:var(--bg);overflow-y:auto;display:none;-webkit-overflow-scrolling:touch}'
+    + '.sheet{position:fixed;inset:0;z-index:40;background:var(--bg);overflow-y:auto;scroll-behavior:smooth;display:none;-webkit-overflow-scrolling:touch}'
     + '.sheet.open{display:block;animation:sheetin .28s var(--ease)}@keyframes sheetin{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}'
     + '.gal{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;background:var(--surface-2)}.gal::-webkit-scrollbar{display:none}'
     + '.gal img{flex:none;width:100%;aspect-ratio:4/3;object-fit:cover;scroll-snap-align:start}'
@@ -136,6 +136,12 @@
     + '.gcount{position:absolute;right:12px;bottom:12px;background:rgba(0,0,0,.6);color:#fff;font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px;z-index:2}'
     + '.close{position:fixed;top:calc(var(--s-3) + env(safe-area-inset-top,0px));right:var(--s-3);z-index:21;width:40px;height:40px;border-radius:50%;border:0;background:var(--scrim);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);color:var(--text-1);display:grid;place-items:center}'
     + '.close svg{width:18px;height:18px}'
+    // sticky back bar inside the details view: a clear way back, plus step through listings without returning to the grid
+    + '.sheethead{position:sticky;top:0;z-index:3;padding:calc(var(--s-2) + env(safe-area-inset-top,0px)) var(--s-4) var(--s-2);background:color-mix(in srgb,var(--bg) 88%,transparent);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}'
+    + '.sheethead-in{display:flex;align-items:center;justify-content:space-between;gap:var(--s-3);max-width:720px;margin:0 auto;width:100%}'
+    + '.back{display:inline-flex;align-items:center;gap:5px;padding:9px 16px 9px 12px;border:0;border-radius:var(--r-pill);background:var(--surface-3);color:var(--text-1);font-size:14px;font-weight:600;cursor:pointer;transition:background .18s var(--ease)}.back:hover{background:var(--surface-4)}.back b{font-size:19px;line-height:1;margin-top:-1px}'
+    + '.stepnav{display:flex;gap:6px;flex:none}'
+    + '.step{min-width:40px;padding:9px 13px;border:0;border-radius:var(--r-md);background:var(--surface-2);color:var(--text-2);font-size:13px;font-weight:600;cursor:pointer;transition:background .18s var(--ease),color .18s var(--ease)}.step:hover:not(:disabled){background:var(--surface-4);color:var(--text-1)}.step:disabled{opacity:.35;cursor:default}'
     + '.det{padding:var(--s-4) var(--s-4) var(--s-6)}'
     + '.det .tags{display:flex;gap:var(--s-1);margin-bottom:var(--s-3)}'
     + '.det .area{font-size:27px}'
@@ -196,7 +202,8 @@
     + 'body.pc .sold{grid-template-columns:repeat(auto-fill,minmax(360px,1fr));align-items:start;padding:var(--s-4)}'
     + 'body.pc .empty{padding:var(--s-8)}'
     // on a computer the details view is a centred column, not full-width, so the photo isn\'t huge
-    + 'body.pc .sheet{padding:var(--s-6) 0}'
+    + 'body.pc .sheet{padding:0 0 var(--s-6)}'
+    + 'body.pc .sheethead{padding-top:var(--s-3);padding-bottom:var(--s-3);padding-left:var(--s-5);padding-right:var(--s-5)}'
     + 'body.pc .galwrap{max-width:720px;margin:0 auto}body.pc .gal{border-radius:14px}body.pc .gal img{aspect-ratio:16/10}'
     + 'body.pc .det{max-width:720px;margin:0 auto;padding-left:0;padding-right:0}';
     var pst = document.createElement('style'); pst.textContent = pcss; document.head.appendChild(pst);
@@ -219,7 +226,7 @@
       + '<div id="pmain"></div><div class="sheet" id="psheet"></div>';
     document.body.appendChild(app);
     if (PC) document.body.classList.add('pc');
-    var L = [], SOLD = [], RENTED = [], coldList = [], tab = 'list', filt = 'all', q = '', sortBy = 'rec', lastUpdated = null, shown = [], drawn = 0, BATCH = 15, io = null, sheetHist = false;
+    var L = [], SOLD = [], RENTED = [], coldList = [], tab = 'list', filt = 'all', q = '', sortBy = 'rec', lastUpdated = null, shown = [], drawn = 0, BATCH = 15, io = null, sheetHist = false, curRef = null, savedY = 0;
     var main = document.getElementById('pmain'), sheet = document.getElementById('psheet');
     // phone cards use the smaller Property Finder image (about 1/3 the bytes) to keep memory low on mobile browsers
     var sm = function(u){ return String(u).replace('/1312x894.', '/668x452.'); };
@@ -374,7 +381,11 @@
       var ours = !x.por && x.price ? x.price : null, diff = ours && c ? ours - c.price : null;
       var verdict = diff == null ? '' : diff > 0 ? '<div class="verdict neg">' + aed(diff) + ' above the cheapest</div>'
         : diff < 0 ? '<div class="verdict pos">Cheapest on the market, ' + aed(-diff) + ' below the next</div>' : '<div class="verdict">Same price as the cheapest</div>';
-      sheet.innerHTML = '<button class="close" id="pclose" aria-label="Close">' + CLOSE + '</button>'
+      var pos = shown.map(function(y){ return y.ref; }).indexOf(ref);
+      sheet.innerHTML = '<div class="sheethead"><div class="sheethead-in">'
+        + '<button class="back" id="pback" aria-label="Back to listings"><b>‹</b> Back</button>'
+        + '<div class="stepnav"><button class="step" id="pprev" aria-label="Previous listing"' + (pos <= 0 ? ' disabled' : '') + '>‹ Prev</button><button class="step" id="pnext" aria-label="Next listing"' + (pos < 0 || pos >= shown.length - 1 ? ' disabled' : '') + '>Next ›</button></div>'
+        + '</div></div>'
         + '<div class="galwrap"><div class="gal" id="pgal">' + x.imgs.map(function(u, k){ return '<img loading="' + (k ? 'lazy' : 'eager') + '" decoding="async" src="' + e(u) + '" alt="">'; }).join('') + '</div>'
         + (x.imgs.length > 1 ? '<button class="gnav gprev" id="pgprev" aria-label="Previous photo">‹</button><button class="gnav gnext" id="pgnext" aria-label="Next photo">›</button><div class="gcount" id="pgcount">1 / ' + x.imgs.length + '</div>' : '')
         + '</div>'
@@ -404,9 +415,14 @@
         + '<button class="btn2" data-ref="' + e(x.ref) + '">' + DL + '<span class="lb">Download brochure (PDF)</span></button>'
         + (x.url ? '<a class="btn" href="' + e(x.url) + '" target="_blank" rel="noopener">View on Property Finder</a>' : '')
         + '</div>';
+      if (curRef === null) savedY = window.scrollY; // first open: remember where the list was, so Back returns there
+      curRef = ref;
       sheet.classList.add('open'); sheet.scrollTop = 0; document.body.style.overflow = 'hidden';
       wireGallery(x.imgs.length);
-      document.getElementById('pclose').onclick = function(){ if (sheetHist) history.back(); else closeDetail(); };
+      document.getElementById('pback').onclick = function(){ if (sheetHist) history.back(); else closeDetail(); };
+      var pv = document.getElementById('pprev'), nx = document.getElementById('pnext');
+      if (pv) pv.onclick = function(){ if (pos > 0) openDetail(shown[pos - 1].ref); };
+      if (nx) nx.onclick = function(){ if (pos < shown.length - 1) openDetail(shown[pos + 1].ref); };
       if (!sheetHist){ try { history.pushState({d:1}, ''); sheetHist = true; } catch (er) {} }
     }
     // step through all photos on the detail view (arrows for PC/mouse, swipe still works on phones)
@@ -422,11 +438,20 @@
       gal.onscroll = function(){ if (cnt) cnt.textContent = (idx() + 1) + ' / ' + n; };
     }
     function closeDetail(){
-      sheetHist = false; sheet.classList.remove('open'); document.body.style.overflow = '';
+      sheetHist = false; curRef = null; sheet.classList.remove('open'); document.body.style.overflow = '';
       sheet.innerHTML = ''; // free the full-size gallery photos
+      window.scrollTo(0, savedY); // drop the user back where they were in the list
       if (pending){ pending = false; render(); }
     }
+    try { if ('scrollRestoration' in history) history.scrollRestoration = 'manual'; } catch (er) {} // we restore the list position ourselves on Back
     window.addEventListener('popstate', closeDetail);
+    // keyboard: Esc goes back to the list; ‹ › step between listings (when a photo gallery isn't the focus)
+    document.addEventListener('keydown', function(ev){
+      if (!sheet.classList.contains('open')) return;
+      if (ev.key === 'Escape'){ if (sheetHist) history.back(); else closeDetail(); return; }
+      if (ev.key === 'ArrowLeft'){ var p = document.getElementById('pprev'); if (p && !p.disabled) p.click(); }
+      else if (ev.key === 'ArrowRight'){ var n = document.getElementById('pnext'); if (n && !n.disabled) n.click(); }
+    });
 
     // ---------- PDF brochure (built in the browser; jsPDF and the QR library load only when first used) ----------
     var scripts = {};
