@@ -40,12 +40,12 @@
   }
   // set x.mkt / x.stale / x.dLive on one listing (since must already be ms)
   function setFlags(x){ x.mkt = mktFlag(x); x.dLive = daysLive(x.since); x.stale = x.dLive != null && x.dLive > STALE_DAYS; return x; }
-  // agents with no listing newer than COLD_DAYS → [{name, days}], most idle first; `since` must already be ms
+  // agents with no listing newer than COLD_DAYS → [{name, days, avatar}], most idle first; `since` must already be ms
   function coldAgentsOf(list){
-    var latest = {};
-    list.forEach(function(x){ if (x.agent){ var s = x.since || 0; if (!(x.agent in latest) || s > latest[x.agent]) latest[x.agent] = s; } });
+    var latest = {}, av = {};
+    list.forEach(function(x){ if (x.agent){ var s = x.since || 0; if (!(x.agent in latest) || s > latest[x.agent]) latest[x.agent] = s; if (x.avatar && !av[x.agent]) av[x.agent] = x.avatar; } });
     var cut = Date.now() - COLD_DAYS * 864e5, out = [];
-    Object.keys(latest).forEach(function(a){ if (latest[a] && latest[a] < cut) out.push({name: a, days: daysLive(latest[a]) || 0}); });
+    Object.keys(latest).forEach(function(a){ if (latest[a] && latest[a] < cut) out.push({name: a, days: daysLive(latest[a]) || 0, avatar: av[a] || ''}); });
     return out.sort(function(p, q){ return q.days - p.days; });
   }
 
@@ -656,23 +656,24 @@ var css = TOKENS
   + '#tv .coldtv .warn{font-size:5.5vw;line-height:1}#tv .coldtv h2{font-family:var(--serif);font-size:4.2vw;font-weight:400;line-height:1}'
   + '#tv .coldtv p{font-size:var(--t-md);opacity:.9;margin-bottom:1vh}'
   + '#tv .coldtv .clist{display:grid;grid-template-columns:repeat(2,1fr);gap:.7vh 4vw}#tv .coldtv.many .clist{grid-template-columns:repeat(3,1fr);gap:.5vh 2.6vw}'
-  + '#tv .coldtv .crow{display:flex;justify-content:space-between;align-items:baseline;gap:1.2vw;border-top:.15vh solid rgba(255,255,255,.3);padding-top:.7vh}'
-  + '#tv .coldtv .crow b{font-size:var(--t-md);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#tv .coldtv .crow span{font-size:var(--t-sm);opacity:.85;white-space:nowrap}'
-  + '#tv .coldtv.many .crow b{font-size:var(--t-sm)}#tv .coldtv.many .crow span{font-size:var(--t-xs)}'
+  + '#tv .coldtv .crow{display:flex;align-items:center;gap:1vw;border-top:.15vh solid rgba(255,255,255,.3);padding-top:.7vh}'
+  + '#tv .coldtv .cav{width:3.6vh;height:3.6vh;border-radius:50%;flex:none;display:inline-flex;align-items:center;justify-content:center;overflow:hidden;background:rgba(255,255,255,.22);color:#fff;font-size:1.3vh;font-weight:700}#tv .coldtv .cav img{width:100%;height:100%;object-fit:cover;object-position:top}'
+  + '#tv .coldtv .crow .nm{font-size:var(--t-md);font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#tv .coldtv .crow .d{font-size:var(--t-sm);opacity:.85;white-space:nowrap;margin-left:auto}'
+  + '#tv .coldtv.many .crow .nm{font-size:var(--t-sm)}#tv .coldtv.many .crow .d{font-size:var(--t-xs)}#tv .coldtv.many .cav{width:3vh;height:3vh}'
   + '#tv .dots{position:absolute;left:var(--safe-x);bottom:var(--safe-y);display:flex;gap:.6vw;z-index:2}'
   + '#tv .dots i{width:2.6vw;height:.6vh;background:rgba(255,255,255,.35);border-radius:2px}#tv .dots i.on{background:#fff}'
   + '#tv .in{position:relative;padding:var(--safe-y) var(--safe-x) var(--safe-y) 3.2vw;display:flex;flex-direction:column;background:var(--panel)}'
   + '#tv .br{display:flex;justify-content:space-between;align-items:center;padding-bottom:2vh}'
   + '#tv .br .logo em{display:block;font-style:normal;font-weight:500;font-size:var(--t-xs);color:var(--muted);margin-top:.6vh}'
   + '#tv .br .logo svg{height:2.6vw;width:auto;display:block;color:var(--text-1)}#tv .br span{white-space:nowrap;font-size:var(--t-xs);font-weight:500;color:var(--muted)}'
-  + '#tv .bd{flex:1;display:flex;flex-direction:column;justify-content:center;gap:2.6vh}'
-  + '#tv .sub{font-size:var(--t-sm);color:var(--text-2);font-weight:500;margin-top:-1.4vh}'
-  + '#tv .loc{font-family:var(--serif);font-size:var(--t-xl);line-height:1.02;color:var(--gold);letter-spacing:-.01em;font-weight:400}'
+  + '#tv .bd{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:1.1vh;overflow:hidden}'
+  + '#tv .sub{font-size:var(--t-sm);color:var(--text-2);font-weight:500;margin-top:-1vh;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+  + '#tv .loc{font-family:var(--serif);font-size:3.6vw;line-height:1.04;color:var(--gold);letter-spacing:-.01em;font-weight:400;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}'
   + '#tv .was{font-size:var(--t-sm);font-weight:500;color:var(--muted);margin-top:-1.2vh}#tv .was s{color:var(--text-2)}'
   // the title is a highlight, not a paragraph: at most two lines
   + '#tv .ti{font-size:var(--t-md);line-height:1.2;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}'
   + '#tv .pt{font-size:var(--t-sm);font-weight:500;color:var(--muted);display:flex;gap:1.2vw;align-items:center;flex-wrap:wrap}'
-  + '#tv .pr{font-size:var(--t-xxl);font-weight:700;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em}#tv .pr small{font-size:var(--t-sm);font-weight:500;color:var(--muted);margin-left:.5vw;letter-spacing:0}'
+  + '#tv .pr{font-size:4.6vw;font-weight:700;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em}#tv .pr small{font-size:var(--t-sm);font-weight:500;color:var(--muted);margin-left:.5vw;letter-spacing:0}'
   + '#tv .pr .cur{font-size:var(--t-md);font-weight:600;color:var(--gold);margin-right:.7vw;vertical-align:1.3vw;letter-spacing:0}'
   + '#tv .sp{display:grid;grid-template-columns:repeat(3,auto);justify-content:start;gap:0 3.2vw}'
   + '#tv .sp b{display:block;font-size:var(--t-lg);font-weight:600;line-height:1.1;font-variant-numeric:tabular-nums}#tv .sp span{font-size:var(--t-xs);font-weight:500;color:var(--muted)}'
@@ -751,14 +752,18 @@ var css = TOKENS
   // A "round" shows every listing once and each Premium/Featured listing twice. `shown` counts what this
   // round has already put on screen, so rebuilding the queue (new data, or the 6-hourly reload) continues
   // the round instead of starting it again from the top.
-  var PAID_PER_ROUND = 2, shown = {}, SHOWN_KEY = 'bh-tv-round';
+  var PAID_PER_ROUND = 2, TV_AGE_DAYS = 14, shown = {}, SHOWN_KEY = 'bh-tv-round';
   try { var sv = JSON.parse(localStorage.getItem(SHOWN_KEY) || 'null'); if (sv && Date.now() - sv.t < 12 * 3600000) shown = sv.shown || {}; } catch (er) {}
   function saveShown(){ try { localStorage.setItem(SHOWN_KEY, JSON.stringify({t: Date.now(), shown: shown})); } catch (er) {} }
+  // the TV is an attention board: only listings that need action — below market (HOT), 25%+ over, or 14+ days old
+  function needsAttention(x){ return x.mkt === 'hot' || x.mkt === 'over' || (x.dLive != null && x.dLive >= TV_AGE_DAYS); }
   function buildQueue(){
     var newest = function(a,b){ return (b.since || 0) - (a.since || 0); };
-    var paid = all.filter(function(x){ return x.level === 'premium'; }).sort(newest)
-      .concat(all.filter(function(x){ return x.level === 'featured'; }).sort(newest));
-    var rest = all.filter(function(x){ return x.level !== 'premium' && x.level !== 'featured'; }).sort(newest);
+    var pool = all.filter(needsAttention);
+    if (!pool.length) pool = all; // nothing needs attention: fall back to the full stock rather than a blank screen
+    var paid = pool.filter(function(x){ return x.level === 'premium'; }).sort(newest)
+      .concat(pool.filter(function(x){ return x.level === 'featured'; }).sort(newest));
+    var rest = pool.filter(function(x){ return x.level !== 'premium' && x.level !== 'featured'; }).sort(newest);
     // spread the paid slots evenly through the round; a listing's two slots land about half a round apart
     var order = [], slots = rest.length ? paid.length * PAID_PER_ROUND : paid.length, pi = 0;
     for (var i = 0; i < rest.length; i++){
@@ -780,8 +785,12 @@ var css = TOKENS
         out.push({kind: rentTurn ? 'rented' : 'sold', key: (rentTurn ? 'rented:' : 'sold:') + n});
       }
     });
-    // one prominent "needs to be more active" slide at the start of each round, listing every idle agent
-    if (coldAgents.length) out.unshift({kind:'cold', key:'cold:a'});
+    // the "needs to be more active" slide recurs about once a minute (a cold slide, then ~3 others at 15s each)
+    if (coldAgents.length){
+      var withCold = [{kind:'cold', key:'cold:0'}], c = 0;
+      out.forEach(function(s){ withCold.push(s); c++; if (c % 3 === 0) withCold.push({kind:'cold', key:'cold:' + c}); });
+      out = withCold;
+    }
     queue = out;
     pos = -1;
   }
@@ -880,7 +889,7 @@ var css = TOKENS
       else pos = (pct > 0 ? pct + '% above the cheapest' : 'in line with the cheapest');
       s += '<div class="tvcomp fd" style="animation-delay:.26s">Cheapest similar elsewhere <b>' + money(x.comp.price) + '</b> · ' + pos + '</div>';
     }
-    if (x.stale) s += '<div class="tvflag stale fd" style="animation-delay:.3s">⏱ Live ' + x.dLive + ' days · remove or refresh</div>';
+    if (x.dLive != null && x.dLive >= TV_AGE_DAYS) s += '<div class="tvflag stale fd" style="animation-delay:.3s">⏱ Live ' + x.dLive + ' days · refresh or remove</div>';
     return s;
   }
   // full-screen red slide naming every agent with no new listing in the last 7 days
@@ -889,7 +898,13 @@ var css = TOKENS
     tv.classList.add('alert');
     $('tvtags').innerHTML = ''; $('tvag').innerHTML = ''; $('tvag').style.display = 'none'; $('tvref').textContent = '';
     var many = coldAgents.length > 9;
-    var rows = coldAgents.map(function(a){ return '<div class="crow"><b>' + esc(a.name) + '</b><span>' + a.days + 'd</span></div>'; }).join('');
+    var rows = coldAgents.map(function(a){
+      var ini = (a.name || '').split(/\s+/).filter(Boolean).map(function(w){ return w[0]; }).slice(0,2).join('').toUpperCase();
+      var pic = a.avatar
+        ? '<span class="cav"><img src="' + esc(a.avatar) + '" alt="" onerror="this.parentNode.textContent=&#39;' + esc(ini) + '&#39;"></span>'
+        : '<span class="cav">' + esc(ini) + '</span>';
+      return '<div class="crow">' + pic + '<b class="nm">' + esc(a.name) + '</b><span class="d">' + a.days + 'd</span></div>';
+    }).join('');
     $('tvbd').innerHTML = '<div class="coldtv' + (many ? ' many' : '') + ' fd"><div class="warn">⚠</div><h2>Needs to be more active</h2>'
       + '<p>No new listing in the last 7 days · ' + coldAgents.length + ' agents</p><div class="clist">' + rows + '</div></div>';
     startBar();
