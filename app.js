@@ -848,6 +848,30 @@ var css = TOKENS
   + '#tv .coldtv .cav{width:8vh;height:8vh;border-radius:50%;flex:none;display:inline-flex;align-items:center;justify-content:center;overflow:hidden;background:rgba(255,255,255,.22);color:#fff;font-size:2.8vh;font-weight:700}#tv .coldtv .cav img{width:100%;height:100%;object-fit:cover;object-position:top}'
   + '#tv .coldtv .crow .nm{font-size:var(--t-md);font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#tv .coldtv .crow .d{font-size:var(--t-sm);opacity:.85;white-space:nowrap;margin-left:auto}'
   + '#tv .coldtv.many .crow .nm{font-size:var(--t-sm)}#tv .coldtv.many .crow .d{font-size:var(--t-xs)}#tv .coldtv.many .cav{width:6vh;height:6vh;font-size:2.1vh}'
+  // "deal closed" celebration slide (full-screen takeover, celebratory slate/denim)
+  + '#tv.deal{grid-template-columns:1fr}#tv.deal .ph{display:none}#tv.deal,#tv.deal .in{background:radial-gradient(130% 130% at 12% 0%,#2C537A 0%,#1F343F 58%)}'
+  + '#tv .dealtv{display:flex;flex-direction:column;justify-content:center;height:100%;gap:1.4vh;color:#fff}'
+  + '#tv .deyebrow{font-size:var(--t-sm);letter-spacing:.3em;text-transform:uppercase;color:var(--gold);font-weight:600}'
+  + '#tv .dhero{display:flex;align-items:center;gap:2vw}'
+  + '#tv .dav{width:12vh;height:12vh;border-radius:50%;flex:none;display:inline-flex;align-items:center;justify-content:center;overflow:hidden;background:rgba(255,255,255,.18);color:#fff;font-size:4vh;font-weight:700;border:.3vh solid var(--gold)}#tv .dav img{width:100%;height:100%;object-fit:cover;object-position:top}'
+  + '#tv .dwho span{display:block;font-size:var(--t-sm);color:rgba(255,255,255,.75);font-weight:500}#tv .dwho b{font-family:var(--serif);font-size:3.6vw;font-weight:400;line-height:1.04}'
+  + '#tv .dplace{font-family:var(--serif);font-size:2.9vw;color:var(--gold);line-height:1.05;margin-top:1vh;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}'
+  + '#tv .dsub{font-size:var(--t-md);color:rgba(255,255,255,.85);font-weight:500}'
+  + '#tv .dval{margin-top:1.4vh}#tv .dval>span{display:block;font-size:var(--t-sm);text-transform:uppercase;letter-spacing:.12em;color:rgba(255,255,255,.7);font-weight:600;margin-bottom:.4vh}'
+  + '#tv .dval b{font-family:var(--serif);font-size:6.6vw;font-weight:400;line-height:1;color:#fff}#tv .dval i{font-size:2.2vw;font-style:normal;color:var(--gold);font-weight:600;margin-right:.6vw}#tv .dval small{font-size:1.9vw;color:rgba(255,255,255,.7)}'
+  + '#tv .dwhen{font-size:var(--t-sm);color:rgba(255,255,255,.65);font-weight:500;margin-top:1.4vh}'
+  // deal-closed two-pane version (photos left, congrats panel right)
+  + '#tv .tg.Deal{background:var(--gold);color:#1F343F}'
+  + '#tv .congrat{font-size:var(--t-sm);text-transform:uppercase;letter-spacing:.18em;color:var(--gold);font-weight:600;margin-bottom:.4vh}'
+  + '#tv .dealpr{margin-top:1vh}#tv .dealpr>span{display:block;font-size:var(--t-sm);text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-weight:600;margin-bottom:.3vh}'
+  + '#tv .dealpr b{font-family:var(--serif);font-size:4.6vw;font-weight:400;color:var(--text-1);line-height:1}#tv .dealpr i{font-size:1.7vw;font-style:normal;color:var(--gold);font-weight:600;margin-right:.5vw}#tv .dealpr small{font-size:1.5vw;color:var(--muted)}'
+  // celebration: confetti rain + a pop on the value
+  + '#tv .confetti{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:50}'
+  + '#tv .confetti i{position:absolute;top:-8vh;width:.8vw;height:1.3vw;opacity:0;animation:conffall linear infinite}'
+  + '@keyframes conffall{0%{transform:translateY(-10vh) rotate(0);opacity:0}8%{opacity:.95}92%{opacity:.95}100%{transform:translateY(112vh) rotate(760deg);opacity:0}}'
+  + '@keyframes dpop{0%{transform:scale(.82);opacity:0}60%{transform:scale(1.04)}100%{transform:scale(1);opacity:1}}'
+  + '#tv .dealpr b,#tv .dval b{display:inline-block;animation:dpop .6s cubic-bezier(.2,.9,.3,1.2) both;animation-delay:.25s}'
+  + '#tv .congrat,#tv .dwho span{animation:dpop .5s ease both}'
   + '#tv .dots{position:absolute;left:var(--safe-x);bottom:var(--safe-y);display:flex;gap:.6vw;z-index:2}'
   + '#tv .dots i{width:2.6vw;height:.6vh;background:rgba(255,255,255,.35);border-radius:2px}#tv .dots i.on{background:#fff}'
   + '#tv .in{position:relative;padding:var(--safe-y) var(--safe-x) var(--safe-y) 3.2vw;display:flex;flex-direction:column;background:var(--panel)}'
@@ -922,7 +946,9 @@ var css = TOKENS
 
   // ---------- data (data.json is refreshed from Property Finder every 10 minutes) ----------
   var status = {err:[]}, soldAreas = [], soldIdx = 0, rentedAreas = [], rentedIdx = 0, SOLD_EVERY = 8;
+  var DEALS = [], dealIdx = 0, DEAL_EVERY = 6; // latest Local Division closed deals → "deal closed" celebration slide
   var dataStamp = null; // data.json's "updated" time; the slideshow only rebuilds when it changes
+  function loadDeals(){ return fetch('deals.json?t=' + Date.now(), {cache:'no-store'}).then(function(r){ return r.ok ? r.json() : null; }).then(function(d){ if (d && d.deals) DEALS = d.deals; }).catch(function(){}); }
   function load(){
     return fetch('data.json?t=' + Date.now(), {cache:'no-store'}).then(function(r){ if (!r.ok) throw new Error('data ' + r.status); return r.json(); })
       .then(function(d){
@@ -966,6 +992,8 @@ var css = TOKENS
     var out = [], n = 0;
     order.forEach(function(x){
       out.push(x); n++;
+      // a "deal closed" celebration slide every few slides, cycling through the latest Local Division deals
+      if (DEALS.length && n % DEAL_EVERY === 0){ out.push({kind:'deal', key:'deal:' + n, d: DEALS[dealIdx % DEALS.length]}); dealIdx++; }
       // the price comparison now shows on the listing slide itself; the market report (just sold / rented) stays its own slide
       // every few slides a market-activity slide, alternating just sold / just rented
       if ((soldAreas.length || rentedAreas.length) && n % SOLD_EVERY === 0){
@@ -1138,6 +1166,69 @@ var css = TOKENS
     $('tvref').textContent = '';
     startBar();
   }
+  function makeConfetti(){
+    var wrap = document.createElement('div'); wrap.className = 'confetti';
+    var cols = ['#A97A50','#D9B9A0','#7BA0B2','#2C537A','#EDE8E4','#C9A227','#B9894F'];
+    var html = '';
+    for (var i = 0; i < 46; i++){
+      var c = cols[i % cols.length], left = (Math.random() * 100).toFixed(1), dur = (3 + Math.random() * 3).toFixed(2),
+          del = (Math.random() * 5).toFixed(2), w = (0.5 + Math.random() * 0.7).toFixed(2), round = Math.random() < 0.4 ? ';border-radius:50%' : '';
+      html += '<i style="left:' + left + '%;background:' + c + ';width:' + w + 'vw;height:' + (w * 1.6).toFixed(2) + 'vw;animation-duration:' + dur + 's;animation-delay:' + del + 's' + round + '"></i>';
+    }
+    wrap.innerHTML = html; return wrap;
+  }
+  // "Deal closed" celebration for a Local Division agent's latest closed deal.
+  // With photos of the same building: two-pane (photos left, congrats right). Without: full-screen text.
+  function showDeal(d){
+    var ph = $('tvph');
+    var oldcf = tv.querySelector('.confetti'); if (oldcf) oldcf.remove();
+    tv.appendChild(makeConfetti()); // confetti rain for the celebration
+    imgs.forEach(function(el){ el.remove(); }); imgs = []; clearInterval(photoTimer);
+    [].forEach.call(ph.querySelectorAll('.grid,.spot'), function(el){ el.remove(); });
+    var ini = (d.agent || '').split(/\s+/).filter(Boolean).map(function(w){ return w[0]; }).slice(0,2).join('').toUpperCase();
+    var place = d.tower || d.community || 'Dubai';
+    var bed = d.beds && /studio/i.test(String(d.beds)) ? 'Studio' : (d.beds ? d.beds + ' BR' : '');
+    var sub = [(d.community && d.community !== place) ? d.community : '', bed, d.ptype].filter(Boolean).join(' · ');
+    var big = d.price >= 1e6 ? (d.price / 1e6).toFixed(2).replace(/\.?0+$/, '') + 'M' : num(d.price);
+    var verb = d.type === 'Sale' ? 'Sold for' : 'Leased for';
+    var per = d.type === 'Sale' ? '' : '<small> / year</small>';
+    var when = d.date ? new Date(d.date + 'T00:00:00+04:00').toLocaleDateString('en-GB', {day:'numeric', month:'short', year:'numeric'}) : '';
+    var photos = (d.imgs || []).filter(Boolean);
+    if (photos.length){
+      // two-pane: cycling building photos on the left, congratulations panel on the right
+      tv.classList.remove('deal'); tv.classList.add('dealp'); $('tvag').style.display = '';
+      imgs = photos.map(function(u){ var el = new Image(); el.onerror = function(){ el.dataset.bad = 1; }; el.src = u; ph.insertBefore(el, $('tvtags')); return el; });
+      var dots = $('tvdots'); dots.innerHTML = photos.map(function(){ return '<i></i>'; }).join('');
+      var p = 0;
+      function step(){ var k = 0; while (imgs[p] && imgs[p].dataset.bad && k < imgs.length){ p = (p+1) % imgs.length; k++; } imgs.forEach(function(el,i){ el.classList.toggle('on', i === p); }); [].forEach.call(dots.children, function(dd,i){ dd.classList.toggle('on', i === p); }); p = (p+1) % imgs.length; }
+      step(); photoTimer = setInterval(step, SLIDE_MS / imgs.length);
+      $('tvtags').innerHTML = '<div class="tg Deal">🎉 Deal closed</div>';
+      var av = d.photo ? '<img class="av" src="' + esc(d.photo) + '" alt="">' : '<div class="av ini">' + esc(ini) + '</div>';
+      $('tvag').innerHTML = av + '<div class="fd"><span>Deal closed by</span><b>' + esc(d.agent) + '</b></div>';
+      var avi = tv.querySelector('#tvag img.av'); if (avi) avi.onerror = function(){ avi.outerHTML = '<div class="av ini">' + esc(ini) + '</div>'; };
+      $('tvbd').innerHTML = '<div class="congrat fd">Congratulations ' + esc((d.agent || '').split(/\s+/)[0]) + '!</div>'
+        + '<div class="loc fd">' + esc(place) + '</div>'
+        + (sub ? '<div class="sub fd">' + esc(sub) + '</div>' : '')
+        + '<div class="dealpr fd" style="animation-delay:.15s"><span>' + verb + '</span><b><i>AED</i> ' + big + per + '</b></div>'
+        + '<div class="dwhen fd" style="animation-delay:.2s">' + (when ? 'Closed ' + when + ' · ' : '') + 'Local Division</div>';
+      $('tvref').textContent = '';
+      startBar();
+    } else {
+      // no photos found: full-screen text celebration
+      tv.classList.remove('dealp'); tv.classList.add('deal');
+      $('tvdots').innerHTML = ''; $('tvtags').innerHTML = ''; $('tvag').innerHTML = ''; $('tvag').style.display = 'none'; $('tvref').textContent = '';
+      var pic = d.photo ? '<span class="dav"><img src="' + esc(d.photo) + '" alt="" onerror="this.parentNode.textContent=&#39;' + esc(ini) + '&#39;"></span>' : '<span class="dav">' + esc(ini) + '</span>';
+      $('tvbd').innerHTML = '<div class="dealtv fd">'
+        + '<div class="deyebrow">◆ ◆ ◆&nbsp;&nbsp;Deal closed&nbsp;&nbsp;◆ ◆ ◆</div>'
+        + '<div class="dhero">' + pic + '<div class="dwho"><span>Congratulations</span><b>' + esc(d.agent) + '</b></div></div>'
+        + '<div class="dplace">' + esc(place) + '</div>'
+        + (sub ? '<div class="dsub">' + esc(sub) + '</div>' : '')
+        + '<div class="dval"><span>' + verb + '</span><b><i>AED</i> ' + big + per + '</b></div>'
+        + '<div class="dwhen">' + (when ? 'Closed ' + when + ' · ' : '') + 'Local Division</div>'
+        + '</div>';
+      startBar();
+    }
+  }
   function show(){
     if (pos >= queue.length - 1){ shown = {}; buildQueue(); } // round finished (or nothing left): start a new one
     if (!queue.length) return;
@@ -1148,9 +1239,12 @@ var css = TOKENS
     [].forEach.call(ph.querySelectorAll('.grid,.spot'), function(el){ el.remove(); });
     $('tvag').style.display = '';
     tv.classList.remove('alert'); // only the cold-agent slide is red
+    tv.classList.remove('deal'); tv.classList.remove('dealp'); // deal-closed slide styles
+    var cf = tv.querySelector('.confetti'); if (cf) cf.remove(); // clear celebration confetti
     if (x.kind === 'cold'){ showCold(); return; }
     if (x.kind === 'comp'){ showComp(x.of); return; }
     if (x.kind === 'sold' || x.kind === 'rented'){ showSold(x.kind === 'rented'); return; }
+    if (x.kind === 'deal'){ showDeal(x.d); return; }
     imgs = x.imgs.map(function(u){ var el = new Image(); el.onerror = function(){ el.dataset.bad = 1; }; el.src = u; ph.insertBefore(el, $('tvtags')); return el; });
     var dots = $('tvdots'); dots.innerHTML = x.imgs.map(function(){ return '<i></i>'; }).join('');
     var p = 0;
@@ -1201,7 +1295,8 @@ var css = TOKENS
     });
   }
   function clock(){ $('tvclock').textContent = new Date().toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit', timeZone:'Asia/Dubai'}); }
-  refresh(); setInterval(refresh, REFRESH_MIN * 60000);
+  loadDeals().then(function(){ refresh(); }); setInterval(refresh, REFRESH_MIN * 60000); // deals ready before the first queue is built
+  setInterval(loadDeals, 30 * 60000); // deals change slowly
   clock(); setInterval(clock, 15000);
   tv.addEventListener('click', function(){ var el = document.documentElement; if (!document.fullscreenElement && el.requestFullscreen) el.requestFullscreen(); });
   setTimeout(function(){ location.reload(); }, 6*3600000);

@@ -338,3 +338,93 @@ if (prevBr && prevBr.fetchedAt && prevBr.sig === BRANCH_SIG && (Date.now() - Dat
     console.log('Branch fetch returned nothing; keeping previous branches.json');
   }
 }
+
+// ---------- Local Division closed deals (agent-claimed on Property Finder) for the TV "deal closed" slide ----------
+// Shows the latest few deals across all Local Division agents, each with agent, property, type and value.
+const DEAL_COUNT = 5;                       // latest N deals shown on the board
+const DEAL_TTL_MS = 3 * 60 * 60 * 1000;     // deals change slowly — refresh ~every 3 hours
+let prevDeals = null;
+try { if (existsSync('deals.json')) prevDeals = JSON.parse(readFileSync('deals.json', 'utf8')); } catch (e) {}
+if (prevDeals && prevDeals.fetchedAt && (Date.now() - Date.parse(prevDeals.fetchedAt) < DEAL_TTL_MS)) {
+  console.log('Deals still fresh (' + (prevDeals.deals || []).length + '), skipping');
+} else {
+  // full Local Division agent roster
+  let roster = [];
+  try {
+    for (let p = 1; p <= 6; p++) {
+      const r = await fetch('https://www.propertyfinder.ae/api/pwa/agents?broker_id=' + BROKER + '&page=' + p + '&locale=en', { headers: HEADERS });
+      if (!r.ok) break;
+      const j = await r.json();
+      const a = j.agents || [];
+      a.forEach(x => roster.push({ id: x.id, slug: x.slug, name: x.name }));
+      if (a.length < 20) break;
+    }
+  } catch (e) { console.log('deals roster', e.message); }
+  function findDeals(o) {
+    if (o && typeof o === 'object') {
+      if (Array.isArray(o.claimedTransactionsList)) return o.claimedTransactionsList;
+      for (const k in o) { const r = findDeals(o[k]); if (r) return r; }
+    }
+    return null;
+  }
+  const seen = new Set();
+  let deals = [];
+  for (const ag of roster) {
+    try {
+      const r = await fetch('https://www.propertyfinder.ae/en/agent/' + ag.slug + '-' + ag.id, { headers: { ...HEADERS, accept: 'text/html' } });
+      if (!r.ok) { await sleep(300); continue; }
+      const h = await r.text();
+      const m = h.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
+      if (!m) { await sleep(300); continue; }
+      const list = findDeals(JSON.parse(m[1])) || [];
+      const imgM = h.match(new RegExp('media/images/agent_image/' + ag.id + '/[0-9a-f-]{36}/\\d+x\\d+\\.(?:jpg|webp)'));
+      const photo = imgM ? 'https://static.shared.propertyfinder.ae/' + imgM[0] : '';
+      for (const t of list) {
+        const loc = t.location || {};
+        const key = ag.id + '|' + t.date + '|' + t.price + '|' + (loc.tower || '');
+        if (seen.has(key)) continue;
+        seen.add(key);
+        deals.push({ agent: ag.name, photo, type: t.dealType, price: t.price, date: t.date,
+          community: loc.community || '', tower: loc.tower || '', ptype: t.propertyType || '', beds: t.bedroom || '', path: loc.path || '', imgs: [] });
+      }
+    } catch (e) { console.log('deal agent', ag.name, e.message); }
+    await sleep(400);
+  }
+  deals.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  deals = deals.slice(0, DEAL_COUNT);
+  // attach a few real photos from current listings in the same building (fallback: its parent community)
+  async function dealPhotos(path) {
+    const ids = String(path || '').split('.').filter(Boolean);
+    const tryIds = [ids[ids.length - 1], ids[ids.length - 2]].filter(Boolean);
+    for (const locId of tryIds) {
+      try {
+        const u = 'https://www.propertyfinder.ae/api/pwa/property/search?filters.locations_ids[0]=' + locId + '&pagination.limit=8&pagination.page=1&sorting.sort=newest&locale=en';
+        const r = await fetch(u, { headers: HEADERS });
+        if (!r.ok) { await sleep(300); continue; }
+        const j = await r.json();
+        const out = [];
+        for (const l of (j.listings || [])) {
+          for (const i of ((l.property || {}).images || []).slice(0, 1)) {
+            const url = String(i.medium || i.small || '').replace(/\/\d+x\d+\.(jpg|webp)/, '/1312x894.$1').replace(/\?.*$/, '');
+            if (url) out.push(url);
+            if (out.length >= 5) break;
+          }
+          if (out.length >= 5) break;
+        }
+        if (out.length) return out;
+      } catch (e) {}
+      await sleep(300);
+    }
+    return [];
+  }
+  for (const d of deals) { d.imgs = await dealPhotos(d.path); delete d.path; await sleep(300); }
+  if (deals.length) {
+    const dealJson = JSON.stringify({ fetchedAt: new Date().toISOString(), deals });
+    let prevD = null; try { if (existsSync('deals.json')) prevD = JSON.parse(readFileSync('deals.json', 'utf8')); } catch (e) {}
+    const changed = !prevD || JSON.stringify(prevD.deals || []) !== JSON.stringify(deals);
+    if (changed) { writeFileSync('deals.json', dealJson); console.log('Saved', deals.length, 'deals'); }
+    else { console.log('Deals unchanged'); }
+  } else {
+    console.log('No deals found; keeping previous deals.json');
+  }
+}
