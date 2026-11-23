@@ -1053,6 +1053,7 @@ var css = TOKENS
     imgs.forEach(function(el){ el.remove(); }); imgs = []; clearInterval(photoTimer);
     var old = ph.querySelector('.grid'); if (old) old.remove();
     var oldS = ph.querySelector('.spot'); if (oldS) oldS.remove();
+    var oldTx = ph.querySelector('.dealtx'); if (oldTx) oldTx.remove();
     var g = document.createElement('div'); g.className = 'grid';
     var ps = b.photos.slice(); while (ps.length < 4 && ps.length) ps.push(ps[ps.length % b.photos.length]);
     g.innerHTML = ps.map(function(u){ return '<div style="background-image:url(\'' + u.replace(/'/g,'') + '\')"></div>'; }).join('');
@@ -1204,7 +1205,7 @@ var css = TOKENS
     var oldcf = tv.querySelector('.confetti'); if (oldcf) oldcf.remove();
     tv.appendChild(makeConfetti()); // confetti rain for the celebration
     imgs.forEach(function(el){ el.remove(); }); imgs = []; clearInterval(photoTimer);
-    [].forEach.call(ph.querySelectorAll('.grid,.spot'), function(el){ el.remove(); });
+    [].forEach.call(ph.querySelectorAll('.grid,.spot,.dealtx'), function(el){ el.remove(); });
     var ini = (d.agent || '').split(/\s+/).filter(Boolean).map(function(w){ return w[0]; }).slice(0,2).join('').toUpperCase();
     var place = d.tower || d.community || 'Dubai';
     var bed = d.beds && /studio/i.test(String(d.beds)) ? 'Studio' : (d.beds ? d.beds + ' BR' : '');
@@ -1262,7 +1263,7 @@ var css = TOKENS
     var x = queue[pos], ph = $('tvph');
     if (!x.kind){ shown[x.key] = (shown[x.key] || 0) + 1; saveShown(); }
     imgs.forEach(function(el){ el.remove(); }); clearInterval(photoTimer);
-    [].forEach.call(ph.querySelectorAll('.grid,.spot'), function(el){ el.remove(); });
+    [].forEach.call(ph.querySelectorAll('.grid,.spot,.dealtx'), function(el){ el.remove(); });
     $('tvag').style.display = '';
     tv.classList.remove('alert'); // only the cold-agent slide is red
     tv.classList.remove('deal'); tv.classList.remove('dealp'); // deal-closed slide styles
