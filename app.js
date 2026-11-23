@@ -349,9 +349,10 @@
       shown = items; drawn = 0;
       var ps = document.getElementById('pstats');
       if (ps){
+        var agN = uniqAgents(pool), agTxt = ' · ' + agN + ' agent' + (agN === 1 ? '' : 's');
         if (agent) ps.textContent = items.length + ' listing' + (items.length === 1 ? '' : 's') + ' · agent “' + agent + '”';
-        else if (branch !== 'local') ps.textContent = items.length + ' listing' + (items.length === 1 ? '' : 's') + ' · ' + (branch === 'all' ? 'All branches' : branchName[branch]);
-        else ps.textContent = localStat;
+        else if (branch !== 'local') ps.textContent = items.length + ' listing' + (items.length === 1 ? '' : 's') + ' · ' + (branch === 'all' ? 'All branches' : branchName[branch]) + agTxt;
+        else ps.textContent = localStat + agTxt;
       }
       if (!items.length){
         main.innerHTML = pool.length ? '<div class="empty">Nothing matches' + (q || agent ? ' your filter' : ' this filter') + '.<br><button class="clear" id="pclear">Clear filters</button></div>' : (branch === 'local' ? skel() : '<div class="empty">No listings in this branch right now.</div>');
@@ -803,6 +804,8 @@
       BR.forEach(function(x){ if (x.ptype) types[x.ptype] = 1; });
       sel.innerHTML = '<option value="">Type</option>' + Object.keys(types).sort().map(function(t){ return '<option value="' + e(t) + '"' + (t === cur ? ' selected' : '') + '>' + e(t) + '</option>'; }).join('');
     }
+    // count of distinct agents/brokers in a set of listings (shown in the stats line)
+    function uniqAgents(arr){ var s = {}; arr.forEach(function(x){ if (x.agent) s[x.agent] = 1; }); return Object.keys(s).length; }
     window.__reload = loadPhone; // used by the test script
     main.innerHTML = skel();
     loadPhone(); setInterval(loadPhone, 5*60000);
