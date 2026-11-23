@@ -264,3 +264,75 @@ if (prev === payload) {
   writeFileSync('data.json', JSON.stringify({ updated: new Date().toISOString(), listings, sold, rented }));
   console.log('Saved', listings.length, 'listings,', listings.filter(x => x.comp).length, 'market checks,', listings.filter(x => x.drop).length, 'price cuts,', sold.length, 'sold areas,', rented.length, 'rented areas');
 }
+
+// ---------- other Better Homes branches: lightweight stock for the browse view ----------
+// These power the branch dropdown and agent search only. No galleries, market check, flags or brochures —
+// those stay exclusive to the Local Division stock above. Tapping a branch listing opens it on Property Finder.
+const BRANCHES = [
+  { key: 'bb',       name: 'Business Bay',        id: 2465 },
+  { key: 'marina',   name: 'Dubai Marina',        id: 2463 },
+  { key: 'motor',    name: 'Motor City',          id: 3560 },
+  { key: 'abudhabi', name: 'Abu Dhabi',           id: 2467 },
+  { key: 'sharjah',  name: 'Sharjah',             id: 2468 },
+  { key: 'offplan',  name: 'Off Plan',            id: 3662 },
+  { key: 'lindas',   name: "Linda's Real Estate", id: 4088 },
+  { key: 'crc',      name: 'CRC (Commercial)',    id: 2466 },
+  { key: 'pm',       name: 'Property Management',  id: 2473 }
+];
+const BRANCH_TTL_MS = 50 * 60 * 1000;  // refresh branch stock ~once an hour, not on every 10-minute loop
+const BRANCH_PAGE_CAP = 40;            // up to ~2000 listings per branch per category — covers even the biggest
+let prevBr = null;
+try { if (existsSync('branches.json')) prevBr = JSON.parse(readFileSync('branches.json', 'utf8')); } catch (e) {}
+if (prevBr && prevBr.fetchedAt && (Date.now() - Date.parse(prevBr.fetchedAt) < BRANCH_TTL_MS)) {
+  console.log('Branch stock still fresh (' + (prevBr.listings || []).length + ' listings), skipping this loop');
+} else {
+  async function branchPage(broker, cat, p) {
+    const u = 'https://www.propertyfinder.ae/api/pwa/property/search?sorting.sort=featured&filters.category_id=' + cat +
+      '&filters.furnished=all&pagination.limit=50&pagination.page=' + p +
+      '&filters.price_type=price_type_any&filters.utilities_price_type=notSelected&filters.broker_id=' + broker + '&locale=en';
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const r = await fetch(u, { headers: HEADERS });
+      if (r.ok) return r.json();
+      console.log('branch', broker, cat, p, 'status', r.status);
+      await sleep(2500 * attempt);
+    }
+    return null;
+  }
+  const brAll = [], brCounts = [];
+  for (const b of BRANCHES) {
+    const refs = new Set();
+    for (const cat of [1, 2]) {
+      let p = 1, pages = 1;
+      do {
+        const j = await branchPage(b.id, cat, p);
+        if (!j) break;
+        for (const l of j.listings || []) {
+          if (!l.property) continue;
+          const m = map(l.property);
+          if (!m.ref || refs.has(m.ref) || !m.imgs.length) continue;
+          refs.add(m.ref);
+          brAll.push({ ref: m.ref, title: m.title, type: m.type, price: m.price, por: m.por, period: m.period,
+            beds: m.beds, baths: m.baths, size: m.size, ptype: m.ptype, loc: m.loc, area: m.area,
+            imgs: m.imgs.slice(0, 3), url: m.url, agent: m.agent, avatar: m.avatar, since: m.since,
+            level: m.level, branch: b.key });
+        }
+        pages = (j.meta || {}).page_count || 1;
+        p++;
+        await sleep(250);
+      } while (p <= pages && p <= BRANCH_PAGE_CAP);
+    }
+    brCounts.push({ key: b.key, name: b.name, count: refs.size });
+    console.log('Branch', b.name, refs.size);
+  }
+  if (brAll.length) {
+    writeFileSync('branches.json', JSON.stringify({
+      fetchedAt: new Date().toISOString(),
+      branches: BRANCHES.map(b => ({ key: b.key, name: b.name })),
+      counts: brCounts,
+      listings: brAll
+    }));
+    console.log('Saved', brAll.length, 'branch listings across', BRANCHES.length, 'branches');
+  } else if (prevBr) {
+    console.log('Branch fetch returned nothing; keeping previous branches.json');
+  }
+}

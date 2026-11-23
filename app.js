@@ -86,6 +86,15 @@
     + '.chips::-webkit-scrollbar{display:none}'
     + '.chips button{flex:none;white-space:nowrap;padding:6px var(--s-3);border:0;border-radius:var(--r-pill);background:var(--surface-2);color:var(--text-2);font-size:13px;font-weight:500}'
     + '.chips button.on{background:var(--text-1);color:var(--bg)}'
+    + '.chips.local-only [data-f="comp"],.chips.local-only [data-f="drop"]{display:none}' // market-check/price-reduced are Local-only
+    // branch dropdown in the nav, and the agent filter row
+    + '.brsel{position:relative;display:inline-flex;align-items:center}'
+    + '.brsel:after{content:"▾";position:absolute;right:9px;pointer-events:none;color:var(--text-3);font-size:11px}'
+    + '.brsel select{-webkit-appearance:none;appearance:none;border:0;border-radius:var(--r-pill);background:var(--surface-2);color:var(--text-1);font:inherit;font-size:13px;font-weight:600;padding:7px 26px 7px 12px;max-width:52vw;text-overflow:ellipsis;outline:0;cursor:pointer}'
+    + '.brsel select option{background:var(--surface-2);color:var(--text-1)}'
+    + '.arow{position:relative;margin-top:var(--s-2)}'
+    + '.arow .agentf{padding-right:40px}'
+    + '.agx{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:28px;height:28px;border:0;border-radius:50%;background:var(--surface-3);color:var(--text-1);font-size:17px;line-height:1;display:grid;place-items:center;cursor:pointer}'
     // list cards
     + '.list{padding:var(--s-2) var(--s-3) 0;display:grid;gap:var(--s-3)}'
     + '.card{background:var(--surface-1);border-radius:var(--r-lg);overflow:hidden}'
@@ -102,7 +111,9 @@
     + '.tg{display:inline-block;padding:3px var(--s-2);border-radius:var(--r-sm);font-size:12px;font-weight:600;line-height:1.3;background:var(--scrim);color:var(--text-1)}'
     + '.tg.New{background:var(--accent);color:var(--on-accent)}.tg.Tier{background:var(--tier)}'
     + '.tg.Hot{background:#1f9d57;color:#fff}.tg.Over{background:#c0392b;color:#fff}.tg.Stale{background:#d08700;color:#fff}'
+    + '.tg.Br{background:var(--denim,#2C537A);color:#fff}' // which branch a listing belongs to
     + '.det .tg{background:var(--surface-3)}.det .tg.New{background:var(--accent)}.det .tg.Hot{background:#1f9d57}.det .tg.Over{background:#c0392b}.det .tg.Stale{background:#d08700}'
+    + '.brnote{margin-top:var(--s-5);padding:var(--s-3) var(--s-4);background:var(--surface-2);border-radius:var(--r-md);color:var(--text-2);font-size:13px;line-height:1.4}'
     // coloured one-line callouts under the price, and the inactive-agent banner
     + '.flag{font-size:13px;font-weight:600;margin-top:var(--s-2);display:flex;align-items:center;gap:6px}'
     + '.flag.hot{color:#28c074}.flag.over{color:#ef6a5a}.flag.stale{color:#f0b429}'
@@ -197,6 +208,8 @@
     + 'body.pc .top small{color:var(--text-3);font-weight:600;font-size:13px}'
     + 'body.pc .top .tabs{order:2;margin:0;width:auto;flex:none}'
     + 'body.pc .top .stats{order:3;margin:0 0 0 auto;flex:none;font-size:13px;color:var(--text-3)}'
+    + 'body.pc .brsel select{max-width:240px}'
+    + 'body.pc .arow{max-width:420px}'
     + 'body.pc .bar{top:57px;z-index:20}'
     + 'body.pc .list{grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:var(--s-4);padding:var(--s-4)}'
     + 'body.pc .sold{grid-template-columns:repeat(auto-fill,minmax(360px,1fr));align-items:start;padding:var(--s-4)}'
@@ -213,8 +226,18 @@
     var aed = function(p){ return 'AED ' + (p >= 1e6 ? (p/1e6).toFixed(2).replace(/\.?0+$/, '') + 'M' : n0(p)); };
     var dayN = function(t){ return Math.floor((t + 4*3600000) / 864e5); };
     var pub = function(t){ if (!t) return ''; var d = dayN(Date.now()) - dayN(t); return d <= 0 ? 'Published today' : d === 1 ? 'Published yesterday' : 'Published ' + d + ' days ago'; };
+    // other Better Homes branches (stock loaded lazily from branches.json the first time one is picked)
+    var BRANCHES = [
+      { key: 'bb', name: 'Business Bay' }, { key: 'marina', name: 'Dubai Marina' }, { key: 'motor', name: 'Motor City' },
+      { key: 'abudhabi', name: 'Abu Dhabi' }, { key: 'sharjah', name: 'Sharjah' }, { key: 'offplan', name: 'Off Plan' },
+      { key: 'lindas', name: "Linda's Real Estate" }, { key: 'crc', name: 'CRC (Commercial)' }, { key: 'pm', name: 'Property Management' }
+    ];
+    var branchName = {}; BRANCHES.forEach(function(b){ branchName[b.key] = b.name; });
+    var branchOpts = '<option value="local">Local Division</option>'
+      + BRANCHES.map(function(b){ return '<option value="' + b.key + '">' + e(b.name) + '</option>'; }).join('')
+      + '<option value="all">All branches</option>';
     var app = document.createElement('div');
-    app.innerHTML = '<div class="top"><div class="row1"><span class="logo">' + LOGO + '<em>Trust Better. Get Better.</em></span><small>Local Division</small></div>'
+    app.innerHTML = '<div class="top"><div class="row1"><span class="logo">' + LOGO + '<em>Trust Better. Get Better.</em></span><label class="brsel"><select id="pbranch" aria-label="Branch">' + branchOpts + '</select></label></div>'
       + '<div class="stats" id="pstats">Loading…</div>'
       + '<div class="tabs"><button class="on" data-tab="list">Listings</button><button data-tab="sold">Just sold</button><button data-tab="rented">Just rented</button></div></div>'
       + '<div class="bar" id="pfilters"><div class="srow"><input class="search" id="pq" type="search" enterkeyhint="search" placeholder="Search area or agent" autocomplete="off">'
@@ -222,11 +245,13 @@
       + '<select id="psort" aria-label="Sort by">'
       + '<option value="rec">Recommended</option><option value="new">Newest</option><option value="hot">Below market (HOT)</option><option value="over">Needs price cut</option><option value="drop">Price reduced</option><option value="old">Longest listed</option><option value="plo">Lowest price</option><option value="phi">Highest price</option><option value="big">Largest</option><option value="gap">Above market</option>'
       + '</select></label></div>'
+      + '<div class="arow"><input class="search agentf" id="pagent" type="text" enterkeyhint="search" placeholder="Filter by agent — type a name" list="pagents" autocomplete="off"><button class="agx" id="pagentx" type="button" aria-label="Clear agent filter" hidden>×</button><datalist id="pagents"></datalist></div>'
       + '<div class="chips" id="pchips"><button class="on" data-f="all">All</button><button data-f="new">New</button><button data-f="paid">Premium & featured</button><button data-f="sale">For sale</button><button data-f="rent">For rent</button><button data-f="comp">Market check</button><button data-f="drop">Price reduced</button></div></div>'
       + '<div id="pmain"></div><div class="sheet" id="psheet"></div>';
     document.body.appendChild(app);
     if (PC) document.body.classList.add('pc');
     var L = [], SOLD = [], RENTED = [], coldList = [], tab = 'list', filt = 'all', q = '', sortBy = 'rec', lastUpdated = null, shown = [], drawn = 0, BATCH = 15, io = null, sheetHist = false, curRef = null, savedY = 0;
+    var BR = [], brLoaded = false, brLoading = false, branch = 'local', agent = '', localStat = 'Loading…'; // branch stock + agent filter
     var main = document.getElementById('pmain'), sheet = document.getElementById('psheet');
     // phone cards use the smaller Property Finder image (about 1/3 the bytes) to keep memory low on mobile browsers
     var sm = function(u){ return String(u).replace('/1312x894.', '/668x452.'); };
@@ -276,26 +301,42 @@
         }).join('') + '</div>' : '<div class="empty">' + (rent ? 'No recent rentals yet.' : 'No recent sales yet.') + '</div>';
         return;
       }
-      var ql = q.toLowerCase();
-      var items = L.filter(function(x){
+      // branch stock loads lazily the first time a non-Local branch, All, or an agent search needs it
+      if ((branch !== 'local' || agent) && !brLoaded){
+        loadBranches();
+        main.innerHTML = '<div class="empty">Loading branch stock…</div>';
+        return;
+      }
+      // an agent filter searches the whole group; otherwise the dropdown decides the pool
+      document.getElementById('pchips').classList.toggle('local-only', branch !== 'local' || !!agent);
+      var pool = agent ? L.concat(BR) : branch === 'local' ? L : branch === 'all' ? L.concat(BR) : BR.filter(function(x){ return x.branch === branch; });
+      var ql = q.toLowerCase(), al = agent.toLowerCase();
+      var items = pool.filter(function(x){
         if (filt === 'new' && !x.isNew) return false;
         if (filt === 'paid' && !x.level) return false;
         if (filt === 'sale' && x.type !== 'Sale') return false;
         if (filt === 'rent' && x.type === 'Sale') return false;
         if (filt === 'comp' && !x.comp) return false;
         if (filt === 'drop' && !x.drop) return false;
+        if (al && String(x.agent || '').toLowerCase().indexOf(al) < 0) return false;
         if (ql && (x.loc + ' ' + x.area + ' ' + x.agent + ' ' + x.title + ' ' + x.ref).toLowerCase().indexOf(ql) < 0) return false;
         return true;
       });
       items = sortItems(items);
       shown = items; drawn = 0;
+      var ps = document.getElementById('pstats');
+      if (ps){
+        if (agent) ps.textContent = items.length + ' listing' + (items.length === 1 ? '' : 's') + ' · agent “' + agent + '”';
+        else if (branch !== 'local') ps.textContent = items.length + ' listing' + (items.length === 1 ? '' : 's') + ' · ' + (branch === 'all' ? 'All branches' : branchName[branch]);
+        else ps.textContent = localStat;
+      }
       if (!items.length){
-        main.innerHTML = L.length ? '<div class="empty">Nothing matches' + (q ? ' “' + e(q) + '”' : ' this filter') + '.<br><button class="clear" id="pclear">' + (q ? 'Clear search' : 'Show all listings') + '</button></div>' : skel();
+        main.innerHTML = pool.length ? '<div class="empty">Nothing matches' + (q || agent ? ' your filter' : ' this filter') + '.<br><button class="clear" id="pclear">Clear filters</button></div>' : (branch === 'local' ? skel() : '<div class="empty">No listings in this branch right now.</div>');
         var cb = document.getElementById('pclear');
-        if (cb) cb.onclick = function(){ q = ''; document.getElementById('pq').value = ''; filt = 'all'; [].forEach.call(document.getElementById('pchips').children, function(b){ b.classList.toggle('on', b.getAttribute('data-f') === 'all'); }); render(); };
+        if (cb) cb.onclick = function(){ q = ''; agent = ''; document.getElementById('pq').value = ''; document.getElementById('pagent').value = ''; document.getElementById('pagentx').hidden = true; filt = 'all'; [].forEach.call(document.getElementById('pchips').children, function(b){ b.classList.toggle('on', b.getAttribute('data-f') === 'all'); }); render(); };
         return;
       }
-      main.innerHTML = coldBanner() + '<div class="list" id="plist"></div><div class="more" id="pmore"></div>';
+      main.innerHTML = (branch === 'local' && !agent ? coldBanner() : '') + '<div class="list" id="plist"></div><div class="more" id="pmore"></div>';
       drawMore();
       // draw the rest in batches as the user scrolls, instead of putting every card and photo in the page at once
       if ('IntersectionObserver' in window){
@@ -331,8 +372,8 @@
       var p = parts(x);
       var cimgs = x.imgs.slice(0, 6); // the card previews a few; the full gallery is on the details view
       return '<div class="card" data-ref="' + e(x.ref) + '"><div class="ph"><div class="strip">' + cimgs.map(function(u, k){ return '<img loading="' + (i < 2 && k === 0 ? 'eager' : 'lazy') + '" decoding="async" src="' + e(sm(u)) + '" alt="">'; }).join('') + '</div>'
-        + '<div class="tags">' + tags(x) + '</div>' + (cimgs.length > 1 ? '<div class="cnt">1 / ' + cimgs.length + '</div>' : '')
-        + '<button class="dl" data-ref="' + e(x.ref) + '" aria-label="Download PDF brochure">' + DL + '</button></div>'
+        + '<div class="tags">' + tags(x) + (x.branch ? '<span class="tg Br">' + e(branchName[x.branch] || '') + '</span>' : '') + '</div>' + (cimgs.length > 1 ? '<div class="cnt">1 / ' + cimgs.length + '</div>' : '')
+        + (x.branch ? '' : '<button class="dl" data-ref="' + e(x.ref) + '" aria-label="Download PDF brochure">' + DL + '</button>') + '</div>'
         + '<div class="go" role="button" tabindex="0"><div class="body"><div class="kind">' + e(kind(x)) + '</div><div class="area">' + e(p.area) + '</div>' + (p.bld ? '<div class="bld">' + e(p.bld) + '</div>' : '')
         + '<div class="ttl">' + e(x.title) + '</div><div class="price">' + priceTxt(x) + '</div>'
         + (specs(x) ? '<div class="specs">' + specs(x) + '</div>' : '')
@@ -374,7 +415,7 @@
       list.insertAdjacentHTML('beforeend', h); drawn = end;
     }
     function openDetail(ref){
-      var x = L.filter(function(y){ return y.ref === ref; })[0]; if (!x) return;
+      var x = L.filter(function(y){ return y.ref === ref; })[0] || BR.filter(function(y){ return y.ref === ref; })[0]; if (!x) return;
       var p = parts(x), c = x.comp;
       var ini = (x.agent || '').split(/\s+/).filter(Boolean).map(function(w){ return w[0]; }).slice(0,2).join('').toUpperCase();
       var per = x.type === 'Sale' ? '' : ' / year'; // market comparisons are always against yearly rents
@@ -412,7 +453,7 @@
                   + (d ? '<div class="d">' + (d > 0 ? aed(d) + ' below ours' : aed(-d) + ' above ours') + '</div>' : '')
                   + '</div></a>';
               }).join('') + '</div></div>' : '')
-        + '<button class="btn2" data-ref="' + e(x.ref) + '">' + DL + '<span class="lb">Download brochure (PDF)</span></button>'
+        + (x.branch ? '<div class="brnote">' + e(branchName[x.branch] || '') + ' listing — full photos, details and brochure on Property Finder.</div>' : '<button class="btn2" data-ref="' + e(x.ref) + '">' + DL + '<span class="lb">Download brochure (PDF)</span></button>')
         + (x.url ? '<a class="btn" href="' + e(x.url) + '" target="_blank" rel="noopener">View on Property Finder</a>' : '')
         + '</div>';
       if (curRef === null) savedY = window.scrollY; // first open: remember where the list was, so Back returns there
@@ -649,6 +690,17 @@
       sortBy = this.value; try { localStorage.setItem('bh-sort', sortBy); } catch (er) {}
       render(); window.scrollTo(0, 0);
     });
+    // branch dropdown
+    document.getElementById('pbranch').addEventListener('change', function(){
+      branch = this.value;
+      if (branch !== 'local' && (filt === 'comp' || filt === 'drop')){ filt = 'all'; [].forEach.call(document.getElementById('pchips').children, function(b){ b.classList.toggle('on', b.getAttribute('data-f') === 'all'); }); }
+      render(); window.scrollTo(0, 0);
+    });
+    // agent type-ahead: typing suggests agents (from the datalist); a pick or partial match filters the whole group
+    var agentInp = document.getElementById('pagent'), agentX = document.getElementById('pagentx');
+    agentInp.addEventListener('focus', function(){ if (!brLoaded) loadBranches(); }); // pull every agent into the suggestions
+    agentInp.addEventListener('input', function(){ agent = this.value.trim(); agentX.hidden = !agent; render(); });
+    agentX.onclick = function(){ agent = ''; agentInp.value = ''; agentX.hidden = true; render(); window.scrollTo(0, 0); };
     var pending = false, loading = 0;
     function loadPhone(){
       if (loading && Date.now() - loading < 30000) return; // one request at a time, but never get stuck on a hung one
@@ -665,8 +717,10 @@
           .filter(function(x){ return x.imgs && x.imgs.length; })
           .sort(function(a,b){ var pa = a.level === 'premium' ? 2 : a.level === 'featured' ? 1 : 0, pb = b.level === 'premium' ? 2 : b.level === 'featured' ? 1 : 0; return (b.isNew - a.isNew) || (pb - pa) || (b.since - a.since); });
         coldList = coldAgentsOf(L);
+        buildAgentList();
         var nn = L.filter(function(x){ return x.isNew; }).length;
-        document.getElementById('pstats').textContent = L.length + ' live listings · ' + nn + ' new this week';
+        localStat = L.length + ' live listings · ' + nn + ' new this week';
+        if (branch === 'local' && !agent) document.getElementById('pstats').textContent = localStat;
         if (sheet.classList.contains('open')) pending = true;
         else {
           // keep the reader's place when new data arrives
@@ -681,6 +735,31 @@
           document.getElementById('pretry').onclick = function(ev){ ev.stopPropagation(); main.innerHTML = skel(); loadPhone(); };
         }
       });
+    }
+    // other branches: fetched once, on demand (the file is bigger, so it isn't loaded until a branch or the agent filter needs it)
+    function loadBranches(){
+      if (brLoaded || brLoading) return;
+      brLoading = true;
+      fetch('branches.json?t=' + Date.now(), {cache:'no-store'}).then(function(r){ if (!r.ok) throw new Error('br ' + r.status); return r.json(); }).then(function(d){
+        brLoading = false; brLoaded = true;
+        BR = (d.listings || []).map(function(x){ x.since = Date.parse(x.since || 0) || 0; x.isNew = x.since && (Date.now() - x.since) < 7*864e5; return x; }).filter(function(x){ return x.imgs && x.imgs.length; });
+        buildAgentList();
+        if (branch !== 'local' || agent) render();
+      }).catch(function(){
+        brLoading = false;
+        if (branch !== 'local' || agent){
+          main.innerHTML = '<div class="empty">Could not load branch stock. Check the connection.<button class="retry" id="pretry2">Try again</button></div>';
+          var b = document.getElementById('pretry2'); if (b) b.onclick = function(ev){ ev.stopPropagation(); main.innerHTML = '<div class="empty">Loading branch stock…</div>'; loadBranches(); };
+        }
+      });
+    }
+    // agent autocomplete list, from every listing currently loaded (Local always; branches once fetched)
+    function buildAgentList(){
+      var dl = document.getElementById('pagents'); if (!dl) return;
+      var names = {};
+      L.forEach(function(x){ if (x.agent) names[x.agent] = 1; });
+      BR.forEach(function(x){ if (x.agent) names[x.agent] = 1; });
+      dl.innerHTML = Object.keys(names).sort().map(function(n){ return '<option value="' + e(n) + '">'; }).join('');
     }
     window.__reload = loadPhone; // used by the test script
     main.innerHTML = skel();
