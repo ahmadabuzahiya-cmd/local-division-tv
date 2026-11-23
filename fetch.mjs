@@ -385,39 +385,34 @@ if (prevDeals && prevDeals.fetchedAt && (Date.now() - Date.parse(prevDeals.fetch
         if (seen.has(key)) continue;
         seen.add(key);
         deals.push({ agent: ag.name, photo, type: t.dealType, price: t.price, date: t.date,
-          community: loc.community || '', tower: loc.tower || '', ptype: t.propertyType || '', beds: t.bedroom || '', path: loc.path || '', imgs: [] });
+          community: loc.community || '', tower: loc.tower || '', ptype: t.propertyType || '', beds: t.bedroom || '', tx: [] });
       }
     } catch (e) { console.log('deal agent', ag.name, e.message); }
     await sleep(400);
   }
   deals.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
   deals = deals.slice(0, DEAL_COUNT);
-  // attach a few real photos from current listings in the same building (fallback: its parent community)
-  async function dealPhotos(path) {
-    const ids = String(path || '').split('.').filter(Boolean);
-    const tryIds = [ids[ids.length - 1], ids[ids.length - 2]].filter(Boolean);
-    for (const locId of tryIds) {
-      try {
-        const u = 'https://www.propertyfinder.ae/api/pwa/property/search?filters.locations_ids[0]=' + locId + '&pagination.limit=8&pagination.page=1&sorting.sort=newest&locale=en';
-        const r = await fetch(u, { headers: HEADERS });
-        if (!r.ok) { await sleep(300); continue; }
-        const j = await r.json();
-        const out = [];
-        for (const l of (j.listings || [])) {
-          for (const i of ((l.property || {}).images || []).slice(0, 1)) {
-            const url = String(i.medium || i.small || '').replace(/\/\d+x\d+\.(jpg|webp)/, '/1312x894.$1').replace(/\?.*$/, '');
-            if (url) out.push(url);
-            if (out.length >= 5) break;
-          }
-          if (out.length >= 5) break;
-        }
-        if (out.length) return out;
-      } catch (e) {}
-      await sleep(300);
-    }
-    return [];
+  // attach recent DLD transactions in the deal's community (sales for a sale, rentals for a rental) — real market context, no misleading photos
+  const monthsB = (a, b) => { const s = Date.parse(a), e = Date.parse(b); return s && e && e > s ? Math.max(1, Math.round((e - s) / (30.44 * 864e5))) : null; };
+  async function dealTx(community, isSale) {
+    const kind = isSale ? 'sold' : 'rent';
+    const slug = String(community || '').toLowerCase().replace(/[()]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    if (!slug) return [];
+    function findTx(o) { if (o && typeof o === 'object') { if (Array.isArray(o.transactionList)) return o.transactionList; for (const k in o) { const r = findTx(o[k]); if (r) return r; } } return null; }
+    try {
+      const pp = await nextData('https://www.propertyfinder.ae/en/transactions/' + kind + '/dubai/' + slug);
+      let T = (findTx(pp) || []).filter(t => t.price && t.transactionDate && !t.isBulkTransaction);
+      T.sort((a, b) => Date.parse(b.transactionDate) - Date.parse(a.transactionDate));
+      return T.slice(0, 5).map(t => {
+        const it = { price: t.price, date: t.transactionDate, ptype: t.propertyType || '',
+          beds: /studio/i.test(String(t.bedrooms)) ? 0 : (t.bedrooms == null || t.bedrooms === '' ? null : parseInt(t.bedrooms, 10)),
+          size: Math.round(t.builtupArea || t.plotArea || 0) || null, place: t.locationName || '' };
+        if (!isSale) it.months = monthsB(t.contractStartDate, t.contractEndDate);
+        return it;
+      });
+    } catch (e) { console.log('dealTx', community, e.message); return []; }
   }
-  for (const d of deals) { d.imgs = await dealPhotos(d.path); delete d.path; await sleep(300); }
+  for (const d of deals) { d.tx = await dealTx(d.community, d.type === 'Sale'); delete d.path; delete d.imgs; await sleep(400); }
   if (deals.length) {
     const dealJson = JSON.stringify({ fetchedAt: new Date().toISOString(), deals });
     let prevD = null; try { if (existsSync('deals.json')) prevD = JSON.parse(readFileSync('deals.json', 'utf8')); } catch (e) {}

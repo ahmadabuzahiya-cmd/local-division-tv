@@ -865,6 +865,16 @@ var css = TOKENS
   + '#tv .congrat{font-size:var(--t-sm);text-transform:uppercase;letter-spacing:.18em;color:var(--gold);font-weight:600;margin-bottom:.4vh}'
   + '#tv .dealpr{margin-top:1vh}#tv .dealpr>span{display:block;font-size:var(--t-sm);text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-weight:600;margin-bottom:.3vh}'
   + '#tv .dealpr b{font-family:var(--serif);font-size:4.6vw;font-weight:400;color:var(--text-1);line-height:1}#tv .dealpr i{font-size:1.7vw;font-style:normal;color:var(--gold);font-weight:600;margin-right:.5vw}#tv .dealpr small{font-size:1.5vw;color:var(--muted)}'
+  // deal slide left pane: recent community transactions (no property photos)
+  + '#tv.dealp .ph{background:radial-gradient(130% 130% at 15% 0%,#2C537A 0%,#1F343F 62%)}#tv.dealp .ph:after{display:none}'
+  + '#tv .dealtx{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;gap:2.2vh;padding:var(--safe-y) 3.6vw;color:#fff;z-index:2}'
+  + '#tv .txhead span{font-size:var(--t-sm);text-transform:uppercase;letter-spacing:.18em;color:var(--gold);font-weight:600}#tv .txhead h3{font-family:var(--serif);font-size:3vw;font-weight:400;line-height:1.04;margin-top:.5vh}'
+  + '#tv .txlist{display:flex;flex-direction:column;gap:1.3vh}'
+  + '#tv .txrow{display:grid;grid-template-columns:1fr auto;column-gap:2vw;row-gap:.3vh;border-top:.15vh solid rgba(255,255,255,.18);padding-top:1.1vh}'
+  + '#tv .txrow b{grid-column:1;grid-row:1;font-size:var(--t-md);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'
+  + '#tv .txrow em{grid-column:2;grid-row:1;font-style:normal;font-family:var(--serif);font-size:var(--t-md);color:var(--gold);white-space:nowrap}#tv .txrow em small{font-size:.58em;color:rgba(255,255,255,.6);font-family:var(--sans,inherit)}'
+  + '#tv .txrow i{grid-column:1;grid-row:2;font-style:normal;font-size:var(--t-sm);color:rgba(255,255,255,.72)}#tv .txrow u{grid-column:2;grid-row:2;text-decoration:none;font-size:var(--t-sm);color:rgba(255,255,255,.55);white-space:nowrap;text-align:right}'
+  + '#tv .txnote{font-size:var(--t-xs);color:rgba(255,255,255,.5);margin-top:.6vh}'
   // celebration: confetti rain + a pop on the value
   + '#tv .confetti{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:50}'
   + '#tv .confetti i{position:absolute;top:-8vh;width:.8vw;height:1.3vw;opacity:0;animation:conffall linear infinite}'
@@ -1035,6 +1045,9 @@ var css = TOKENS
     if (bIdx >= brokers.length) bIdx = 0;
   }
   function showBroker(b){
+    // agent spotlight is a normal brand slide — clear any alert/deal styling left by the previous slide (it's called straight from next(), not via show())
+    tv.classList.remove('alert'); tv.classList.remove('deal'); tv.classList.remove('dealp');
+    var cfb = tv.querySelector('.confetti'); if (cfb) cfb.remove();
     $('tvag').style.display = '';
     var ph = $('tvph');
     imgs.forEach(function(el){ el.remove(); }); imgs = []; clearInterval(photoTimer);
@@ -1200,15 +1213,21 @@ var css = TOKENS
     var verb = d.type === 'Sale' ? 'Sold for' : 'Leased for';
     var per = d.type === 'Sale' ? '' : '<small> / year</small>';
     var when = d.date ? new Date(d.date + 'T00:00:00+04:00').toLocaleDateString('en-GB', {day:'numeric', month:'short', year:'numeric'}) : '';
-    var photos = (d.imgs || []).filter(Boolean);
-    if (photos.length){
-      // two-pane: cycling building photos on the left, congratulations panel on the right
+    var tx = (d.tx || []);
+    var fmtTx = function(dt){ return new Date(dt + 'T00:00:00+04:00').toLocaleDateString('en-GB', {day:'numeric', month:'short'}); };
+    if (tx.length){
+      // two-pane: recent community transactions on the left, congratulations panel on the right (no property photos)
       tv.classList.remove('deal'); tv.classList.add('dealp'); $('tvag').style.display = '';
-      imgs = photos.map(function(u){ var el = new Image(); el.onerror = function(){ el.dataset.bad = 1; }; el.src = u; ph.insertBefore(el, $('tvtags')); return el; });
-      var dots = $('tvdots'); dots.innerHTML = photos.map(function(){ return '<i></i>'; }).join('');
-      var p = 0;
-      function step(){ var k = 0; while (imgs[p] && imgs[p].dataset.bad && k < imgs.length){ p = (p+1) % imgs.length; k++; } imgs.forEach(function(el,i){ el.classList.toggle('on', i === p); }); [].forEach.call(dots.children, function(dd,i){ dd.classList.toggle('on', i === p); }); p = (p+1) % imgs.length; }
-      step(); photoTimer = setInterval(step, SLIDE_MS / imgs.length);
+      $('tvdots').innerHTML = '';
+      var rent = d.type !== 'Sale';
+      var rows = tx.slice(0,5).map(function(t){
+        var what = [t.ptype, (t.beds === 0 ? 'Studio' : (t.beds ? t.beds + ' BR' : '')), (t.size ? num(t.size) + ' sq ft' : '')].filter(Boolean).join(' · ');
+        var term = rent ? (!t.months || (t.months >= 11 && t.months <= 13) ? '<small>/yr</small>' : '<small> · ' + t.months + 'mo</small>') : '';
+        return '<div class="txrow"><b>' + esc(t.place || d.community) + '</b><em>' + money(t.price) + term + '</em><i>' + esc(what) + '</i><u>' + fmtTx(t.date) + '</u></div>';
+      }).join('');
+      var txEl = document.createElement('div'); txEl.className = 'dealtx fd';
+      txEl.innerHTML = '<div class="txhead"><span>' + (rent ? 'Recent rentals in' : 'Recent sales in') + '</span><h3>' + esc(d.community || place) + '</h3></div><div class="txlist">' + rows + '</div><div class="txnote">Dubai Land Department · last transactions</div>';
+      ph.insertBefore(txEl, $('tvtags'));
       $('tvtags').innerHTML = '<div class="tg Deal">🎉 Deal closed</div>';
       var av = d.photo ? '<img class="av" src="' + esc(d.photo) + '" alt="">' : '<div class="av ini">' + esc(ini) + '</div>';
       $('tvag').innerHTML = av + '<div class="fd"><span>Deal closed by</span><b>' + esc(d.agent) + '</b></div>';
