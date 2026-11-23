@@ -992,8 +992,9 @@ var css = TOKENS
     var out = [], n = 0;
     order.forEach(function(x){
       out.push(x); n++;
-      // a "deal closed" celebration slide every few slides, cycling through the latest Local Division deals
-      if (DEALS.length && n % DEAL_EVERY === 0){ out.push({kind:'deal', key:'deal:' + n, d: DEALS[dealIdx % DEALS.length]}); dealIdx++; }
+      // a "deal closed" celebration every few slides — but only when there are no inactive-agent slides to pair with
+      // (when there are, each deal follows a "needs to be more active" slide instead; see below)
+      if (DEALS.length && !coldAgents.length && n % DEAL_EVERY === 0){ out.push({kind:'deal', key:'deal:' + n, d: DEALS[dealIdx % DEALS.length]}); dealIdx++; }
       // the price comparison now shows on the listing slide itself; the market report (just sold / rented) stays its own slide
       // every few slides a market-activity slide, alternating just sold / just rented
       if ((soldAreas.length || rentedAreas.length) && n % SOLD_EVERY === 0){
@@ -1001,10 +1002,16 @@ var css = TOKENS
         out.push({kind: rentTurn ? 'rented' : 'sold', key: (rentTurn ? 'rented:' : 'sold:') + n});
       }
     });
-    // the "needs to be more active" slide recurs about once a minute (a cold slide, then ~3 others at 15s each)
+    // the "needs to be more active" slide recurs about once a minute, and a "deal closed" celebration
+    // follows every one of them (cycling through the latest deals) — the win right after the nudge
     if (coldAgents.length){
-      var withCold = [{kind:'cold', key:'cold:0'}], c = 0;
-      out.forEach(function(s){ withCold.push(s); c++; if (c % 3 === 0) withCold.push({kind:'cold', key:'cold:' + c}); });
+      var addCold = function(key){
+        withCold.push({kind:'cold', key:key});
+        if (DEALS.length){ withCold.push({kind:'deal', key:'deal:' + key, d: DEALS[dealIdx % DEALS.length]}); dealIdx++; }
+      };
+      var withCold = [], c = 0;
+      addCold('cold:0');
+      out.forEach(function(s){ withCold.push(s); c++; if (c % 3 === 0) addCold('cold:' + c); });
       out = withCold;
     }
     queue = out;
