@@ -95,6 +95,17 @@
     + '.arow{position:relative;margin-top:var(--s-2)}'
     + '.arow .agentf{padding-right:40px}'
     + '.agx{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:28px;height:28px;border:0;border-radius:50%;background:var(--surface-3);color:var(--text-1);font-size:17px;line-height:1;display:grid;place-items:center;cursor:pointer}'
+    // beds / baths / type / price filter row (horizontally scrollable on phones)
+    + '.frow{display:flex;gap:var(--s-2);overflow-x:auto;margin-top:var(--s-2);scrollbar-width:none;-webkit-overflow-scrolling:touch}'
+    + '.frow::-webkit-scrollbar{display:none}'
+    + '.fsel{position:relative;flex:none;display:inline-flex;align-items:center}'
+    + '.fsel:after{content:"▾";position:absolute;right:9px;pointer-events:none;color:var(--text-3);font-size:11px}'
+    + '.fsel select{-webkit-appearance:none;appearance:none;border:0;border-radius:var(--r-pill);background:var(--surface-2);color:var(--text-1);font:inherit;font-size:13px;font-weight:600;padding:8px 26px 8px 12px;outline:0;cursor:pointer}'
+    + '.fsel select option{background:var(--surface-2);color:var(--text-1)}'
+    + '.fprice{flex:none;display:inline-flex;align-items:center;gap:2px;background:var(--surface-2);border-radius:var(--r-pill);padding:0 10px}'
+    + '.fprice input{width:78px;border:0;background:transparent;color:var(--text-1);font:inherit;font-size:13px;padding:8px 2px;outline:0;-moz-appearance:textfield}'
+    + '.fprice input::-webkit-outer-spin-button,.fprice input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}'
+    + '.fprice input::placeholder{color:var(--text-3)}.fprice span{color:var(--text-3)}'
     // list cards
     + '.list{padding:var(--s-2) var(--s-3) 0;display:grid;gap:var(--s-3)}'
     + '.card{background:var(--surface-1);border-radius:var(--r-lg);overflow:hidden}'
@@ -246,12 +257,19 @@
       + '<option value="rec">Recommended</option><option value="new">Newest</option><option value="hot">Below market (HOT)</option><option value="over">Needs price cut</option><option value="drop">Price reduced</option><option value="old">Longest listed</option><option value="plo">Lowest price</option><option value="phi">Highest price</option><option value="big">Largest</option><option value="gap">Above market</option>'
       + '</select></label></div>'
       + '<div class="arow"><input class="search agentf" id="pagent" type="text" enterkeyhint="search" placeholder="Filter by agent — type a name" list="pagents" autocomplete="off"><button class="agx" id="pagentx" type="button" aria-label="Clear agent filter" hidden>×</button><datalist id="pagents"></datalist></div>'
+      + '<div class="frow">'
+      + '<label class="fsel"><select id="pbeds" aria-label="Bedrooms"><option value="">Beds</option><option value="0">Studio</option><option value="1">1 bed</option><option value="2">2 beds</option><option value="3">3 beds</option><option value="4">4 beds</option><option value="5">5+ beds</option></select></label>'
+      + '<label class="fsel"><select id="pbaths" aria-label="Bathrooms"><option value="">Baths</option><option value="1">1 bath</option><option value="2">2 baths</option><option value="3">3 baths</option><option value="4">4 baths</option><option value="5">5+ baths</option></select></label>'
+      + '<label class="fsel"><select id="ptype" aria-label="Property type"><option value="">Type</option></select></label>'
+      + '<div class="fprice"><input id="pmin" type="number" inputmode="numeric" placeholder="Min price" autocomplete="off"><span>–</span><input id="pmax" type="number" inputmode="numeric" placeholder="Max price" autocomplete="off"></div>'
+      + '</div>'
       + '<div class="chips" id="pchips"><button class="on" data-f="all">All</button><button data-f="new">New</button><button data-f="paid">Premium & featured</button><button data-f="sale">For sale</button><button data-f="rent">For rent</button><button data-f="comp">Market check</button><button data-f="drop">Price reduced</button></div></div>'
       + '<div id="pmain"></div><div class="sheet" id="psheet"></div>';
     document.body.appendChild(app);
     if (PC) document.body.classList.add('pc');
     var L = [], SOLD = [], RENTED = [], coldList = [], tab = 'list', filt = 'all', q = '', sortBy = 'rec', lastUpdated = null, shown = [], drawn = 0, BATCH = 15, io = null, sheetHist = false, curRef = null, savedY = 0;
     var BR = [], brLoaded = false, brLoading = false, branch = 'local', agent = '', localStat = 'Loading…'; // branch stock + agent filter
+    var fBeds = '', fBaths = '', fType = '', fMin = '', fMax = ''; // beds / baths / property-type / price filters
     var main = document.getElementById('pmain'), sheet = document.getElementById('psheet');
     // phone cards use the smaller Property Finder image (about 1/3 the bytes) to keep memory low on mobile browsers
     var sm = function(u){ return String(u).replace('/1312x894.', '/668x452.'); };
@@ -318,6 +336,11 @@
         if (filt === 'rent' && x.type === 'Sale') return false;
         if (filt === 'comp' && !x.comp) return false;
         if (filt === 'drop' && !x.drop) return false;
+        if (fBeds !== '' && !(fBeds === '5' ? (x.beds != null && x.beds >= 5) : x.beds === +fBeds)) return false;
+        if (fBaths !== '' && !(fBaths === '5' ? (x.baths != null && x.baths >= 5) : x.baths === +fBaths)) return false;
+        if (fType && String(x.ptype || '').toLowerCase() !== fType.toLowerCase()) return false;
+        if (fMin && (x.por || x.price == null || x.price < +fMin)) return false;
+        if (fMax && (x.por || x.price == null || x.price > +fMax)) return false;
         if (al && String(x.agent || '').toLowerCase().indexOf(al) < 0) return false;
         if (ql && (x.loc + ' ' + x.area + ' ' + x.agent + ' ' + x.title + ' ' + x.ref).toLowerCase().indexOf(ql) < 0) return false;
         return true;
@@ -333,7 +356,12 @@
       if (!items.length){
         main.innerHTML = pool.length ? '<div class="empty">Nothing matches' + (q || agent ? ' your filter' : ' this filter') + '.<br><button class="clear" id="pclear">Clear filters</button></div>' : (branch === 'local' ? skel() : '<div class="empty">No listings in this branch right now.</div>');
         var cb = document.getElementById('pclear');
-        if (cb) cb.onclick = function(){ q = ''; agent = ''; document.getElementById('pq').value = ''; document.getElementById('pagent').value = ''; document.getElementById('pagentx').hidden = true; filt = 'all'; [].forEach.call(document.getElementById('pchips').children, function(b){ b.classList.toggle('on', b.getAttribute('data-f') === 'all'); }); render(); };
+        if (cb) cb.onclick = function(){
+          q = ''; agent = ''; fBeds = ''; fBaths = ''; fType = ''; fMin = ''; fMax = '';
+          document.getElementById('pq').value = ''; document.getElementById('pagent').value = ''; document.getElementById('pagentx').hidden = true;
+          document.getElementById('pbeds').value = ''; document.getElementById('pbaths').value = ''; document.getElementById('ptype').value = ''; document.getElementById('pmin').value = ''; document.getElementById('pmax').value = '';
+          filt = 'all'; [].forEach.call(document.getElementById('pchips').children, function(b){ b.classList.toggle('on', b.getAttribute('data-f') === 'all'); }); render();
+        };
         return;
       }
       main.innerHTML = (branch === 'local' && !agent ? coldBanner() : '') + '<div class="list" id="plist"></div><div class="more" id="pmore"></div>';
@@ -701,6 +729,12 @@
     agentInp.addEventListener('focus', function(){ if (!brLoaded) loadBranches(); }); // pull every agent into the suggestions
     agentInp.addEventListener('input', function(){ agent = this.value.trim(); agentX.hidden = !agent; render(); });
     agentX.onclick = function(){ agent = ''; agentInp.value = ''; agentX.hidden = true; render(); window.scrollTo(0, 0); };
+    // beds / baths / type / price filters
+    document.getElementById('pbeds').addEventListener('change', function(){ fBeds = this.value; render(); window.scrollTo(0, 0); });
+    document.getElementById('pbaths').addEventListener('change', function(){ fBaths = this.value; render(); window.scrollTo(0, 0); });
+    document.getElementById('ptype').addEventListener('change', function(){ fType = this.value; render(); window.scrollTo(0, 0); });
+    document.getElementById('pmin').addEventListener('input', function(){ fMin = this.value.replace(/[^0-9]/g, ''); render(); });
+    document.getElementById('pmax').addEventListener('input', function(){ fMax = this.value.replace(/[^0-9]/g, ''); render(); });
     var pending = false, loading = 0;
     function loadPhone(){
       if (loading && Date.now() - loading < 30000) return; // one request at a time, but never get stuck on a hung one
@@ -717,7 +751,7 @@
           .filter(function(x){ return x.imgs && x.imgs.length; })
           .sort(function(a,b){ var pa = a.level === 'premium' ? 2 : a.level === 'featured' ? 1 : 0, pb = b.level === 'premium' ? 2 : b.level === 'featured' ? 1 : 0; return (b.isNew - a.isNew) || (pb - pa) || (b.since - a.since); });
         coldList = coldAgentsOf(L);
-        buildAgentList();
+        buildAgentList(); buildTypeList();
         var nn = L.filter(function(x){ return x.isNew; }).length;
         localStat = L.length + ' live listings · ' + nn + ' new this week';
         if (branch === 'local' && !agent) document.getElementById('pstats').textContent = localStat;
@@ -743,7 +777,7 @@
       fetch('branches.json?t=' + Date.now(), {cache:'no-store'}).then(function(r){ if (!r.ok) throw new Error('br ' + r.status); return r.json(); }).then(function(d){
         brLoading = false; brLoaded = true;
         BR = (d.listings || []).map(function(x){ x.since = Date.parse(x.since || 0) || 0; x.isNew = x.since && (Date.now() - x.since) < 7*864e5; return x; }).filter(function(x){ return x.imgs && x.imgs.length; });
-        buildAgentList();
+        buildAgentList(); buildTypeList();
         if (branch !== 'local' || agent) render();
       }).catch(function(){
         brLoading = false;
@@ -760,6 +794,14 @@
       L.forEach(function(x){ if (x.agent) names[x.agent] = 1; });
       BR.forEach(function(x){ if (x.agent) names[x.agent] = 1; });
       dl.innerHTML = Object.keys(names).sort().map(function(n){ return '<option value="' + e(n) + '">'; }).join('');
+    }
+    // property-type dropdown, filled from the types actually present (Apartment, Villa, Townhouse, Office…)
+    function buildTypeList(){
+      var sel = document.getElementById('ptype'); if (!sel) return;
+      var cur = sel.value, types = {};
+      L.forEach(function(x){ if (x.ptype) types[x.ptype] = 1; });
+      BR.forEach(function(x){ if (x.ptype) types[x.ptype] = 1; });
+      sel.innerHTML = '<option value="">Type</option>' + Object.keys(types).sort().map(function(t){ return '<option value="' + e(t) + '"' + (t === cur ? ' selected' : '') + '>' + e(t) + '</option>'; }).join('');
     }
     window.__reload = loadPhone; // used by the test script
     main.innerHTML = skel();
