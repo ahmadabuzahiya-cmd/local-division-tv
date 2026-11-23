@@ -276,14 +276,15 @@ const BRANCHES = [
   { key: 'sharjah',  name: 'Sharjah',             id: 2468 },
   { key: 'offplan',  name: 'Off Plan',            id: 3662 },
   { key: 'lindas',   name: "Linda's Real Estate", id: 4088 },
-  { key: 'crc',      name: 'CRC (Commercial)',    id: 2466 },
+  { key: 'crc',      name: 'CRC (Commercial)',    id: 2466, cats: [3, 4] }, // commercial: offices, retail, warehouses, land
   { key: 'pm',       name: 'Property Management',  id: 2473 }
 ];
 const BRANCH_TTL_MS = 50 * 60 * 1000;  // refresh branch stock ~once an hour, not on every 10-minute loop
 const BRANCH_PAGE_CAP = 40;            // up to ~2000 listings per branch per category — covers even the biggest
+const BRANCH_SIG = JSON.stringify(BRANCHES.map(b => [b.key, b.id, b.cats || [1, 2]]));  // changes when a branch/category is added — forces an immediate refetch
 let prevBr = null;
 try { if (existsSync('branches.json')) prevBr = JSON.parse(readFileSync('branches.json', 'utf8')); } catch (e) {}
-if (prevBr && prevBr.fetchedAt && (Date.now() - Date.parse(prevBr.fetchedAt) < BRANCH_TTL_MS)) {
+if (prevBr && prevBr.fetchedAt && prevBr.sig === BRANCH_SIG && (Date.now() - Date.parse(prevBr.fetchedAt) < BRANCH_TTL_MS)) {
   console.log('Branch stock still fresh (' + (prevBr.listings || []).length + ' listings), skipping this loop');
 } else {
   async function branchPage(broker, cat, p) {
@@ -301,7 +302,7 @@ if (prevBr && prevBr.fetchedAt && (Date.now() - Date.parse(prevBr.fetchedAt) < B
   const brAll = [], brCounts = [];
   for (const b of BRANCHES) {
     const refs = new Set();
-    for (const cat of [1, 2]) {
+    for (const cat of (b.cats || [1, 2])) {  // residential (1,2) by default; CRC uses commercial (3,4)
       let p = 1, pages = 1;
       do {
         const j = await branchPage(b.id, cat, p);
@@ -327,6 +328,7 @@ if (prevBr && prevBr.fetchedAt && (Date.now() - Date.parse(prevBr.fetchedAt) < B
   if (brAll.length) {
     writeFileSync('branches.json', JSON.stringify({
       fetchedAt: new Date().toISOString(),
+      sig: BRANCH_SIG,
       branches: BRANCHES.map(b => ({ key: b.key, name: b.name })),
       counts: brCounts,
       listings: brAll
