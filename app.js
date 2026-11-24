@@ -345,6 +345,11 @@
         if (ql && (x.loc + ' ' + x.area + ' ' + x.agent + ' ' + x.title + ' ' + x.ref).toLowerCase().indexOf(ql) < 0) return false;
         return true;
       });
+      // the attention views are show-only, not just a ranking: picking one lists ONLY those listings, so the user never scrolls past them into unrelated stock
+      if (sortBy === 'hot') items = items.filter(function(x){ return x.mkt === 'hot'; });
+      else if (sortBy === 'over') items = items.filter(function(x){ return x.mkt === 'over'; });
+      else if (sortBy === 'gap') items = items.filter(function(x){ return gapOf(x) != null && gapOf(x) > 0; });
+      else if (sortBy === 'drop') items = items.filter(function(x){ return !!x.drop; });
       items = sortItems(items);
       shown = items; drawn = 0;
       var ps = document.getElementById('pstats');
