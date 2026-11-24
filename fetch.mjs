@@ -325,6 +325,25 @@ if (prevBr && prevBr.fetchedAt && prevBr.sig === BRANCH_SIG && (Date.now() - Dat
     brCounts.push({ key: b.key, name: b.name, count: refs.size });
     console.log('Branch', b.name, refs.size);
   }
+  // price history for branch stock → "Price reduced" for 14 days after a cut (same logic as the Local feed above)
+  if (brAll.length) {
+    let brHist = {};
+    try { if (existsSync('branch-price-history.json')) brHist = JSON.parse(readFileSync('branch-price-history.json', 'utf8')); } catch (e) {}
+    const brHistNext = {};
+    brAll.forEach(x => {
+      const h = brHist[x.ref], p = x.por ? null : x.price;
+      const rec = { price: p };
+      if (h && h.drop && Date.now() - Date.parse(h.drop.at) < DROP_MS && p && p < h.drop.was) rec.drop = h.drop;
+      if (h && h.price && p && p < h.price) rec.drop = { was: rec.drop ? rec.drop.was : h.price, at: new Date().toISOString() };
+      if (rec.drop) x.drop = rec.drop;
+      brHistNext[x.ref] = rec; // only current refs are carried over, so stale listings prune themselves
+    });
+    const brHistJson = JSON.stringify(brHistNext);
+    let prevBrHist = null;
+    try { if (existsSync('branch-price-history.json')) prevBrHist = readFileSync('branch-price-history.json', 'utf8'); } catch (e) {}
+    if (prevBrHist !== brHistJson) writeFileSync('branch-price-history.json', brHistJson);
+    console.log('Branch price cuts:', brAll.filter(x => x.drop).length);
+  }
   if (brAll.length) {
     writeFileSync('branches.json', JSON.stringify({
       fetchedAt: new Date().toISOString(),

@@ -86,7 +86,7 @@
     + '.chips::-webkit-scrollbar{display:none}'
     + '.chips button{flex:none;white-space:nowrap;padding:6px var(--s-3);border:0;border-radius:var(--r-pill);background:var(--surface-2);color:var(--text-2);font-size:13px;font-weight:500}'
     + '.chips button.on{background:var(--text-1);color:var(--bg)}'
-    + '.chips.local-only [data-f="comp"],.chips.local-only [data-f="drop"]{display:none}' // market-check/price-reduced are Local-only
+    + '.chips.local-only [data-f="comp"]{display:none}' // market check needs comps, so it stays Local-only; New and Price reduced work for every branch
     // branch dropdown in the nav, and the agent filter row
     + '.brsel{position:relative;display:inline-flex;align-items:center}'
     + '.brsel:after{content:"▾";position:absolute;right:9px;pointer-events:none;color:var(--text-3);font-size:11px}'
@@ -246,7 +246,7 @@
     var branchName = {}; BRANCHES.forEach(function(b){ branchName[b.key] = b.name; });
     var branchOpts = '<option value="local">Local Division</option>'
       + BRANCHES.map(function(b){ return '<option value="' + b.key + '">' + e(b.name) + '</option>'; }).join('')
-      + '<option value="all">All branches</option>';
+      + '<option value="all" selected>All branches</option>';
     var app = document.createElement('div');
     app.innerHTML = '<div class="top"><div class="row1"><span class="logo">' + LOGO + '<em>Trust Better. Get Better.</em></span><label class="brsel"><select id="pbranch" aria-label="Branch">' + branchOpts + '</select></label></div>'
       + '<div class="stats" id="pstats">Loading…</div>'
@@ -268,7 +268,7 @@
     document.body.appendChild(app);
     if (PC) document.body.classList.add('pc');
     var L = [], SOLD = [], RENTED = [], coldList = [], tab = 'list', filt = 'all', q = '', sortBy = 'rec', lastUpdated = null, shown = [], drawn = 0, BATCH = 15, io = null, sheetHist = false, curRef = null, savedY = 0;
-    var BR = [], brLoaded = false, brLoading = false, branch = 'local', agent = '', localStat = 'Loading…'; // branch stock + agent filter
+    var BR = [], brLoaded = false, brLoading = false, branch = 'all', agent = '', localStat = 'Loading…'; // default to All branches so the site is a full-stock search tool (the TV stays Local-only)
     var fBeds = '', fBaths = '', fType = '', fMin = '', fMax = ''; // beds / baths / property-type / price filters
     var main = document.getElementById('pmain'), sheet = document.getElementById('psheet');
     // phone cards use the smaller Property Finder image (about 1/3 the bytes) to keep memory low on mobile browsers
@@ -322,8 +322,8 @@
       // branch stock loads lazily the first time a non-Local branch, All, or an agent search needs it
       if ((branch !== 'local' || agent) && !brLoaded){
         loadBranches();
-        main.innerHTML = '<div class="empty">Loading branch stock…</div>';
-        return;
+        // "All" shows the Local stock right away while the other branches stream in; a specific branch or an agent search must wait for that data
+        if (!(branch === 'all' && !agent)){ main.innerHTML = '<div class="empty">Loading branch stock…</div>'; return; }
       }
       // an agent filter searches the whole group; otherwise the dropdown decides the pool
       document.getElementById('pchips').classList.toggle('local-only', branch !== 'local' || !!agent);
@@ -722,7 +722,7 @@
     // branch dropdown
     document.getElementById('pbranch').addEventListener('change', function(){
       branch = this.value;
-      if (branch !== 'local' && (filt === 'comp' || filt === 'drop')){ filt = 'all'; [].forEach.call(document.getElementById('pchips').children, function(b){ b.classList.toggle('on', b.getAttribute('data-f') === 'all'); }); }
+      if (branch !== 'local' && filt === 'comp'){ filt = 'all'; [].forEach.call(document.getElementById('pchips').children, function(b){ b.classList.toggle('on', b.getAttribute('data-f') === 'all'); }); }
       render(); window.scrollTo(0, 0);
     });
     // agent type-ahead: typing suggests agents (from the datalist); a pick or partial match filters the whole group
