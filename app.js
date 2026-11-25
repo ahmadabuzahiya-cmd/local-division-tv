@@ -262,6 +262,7 @@
       + '<label class="fsel"><select id="pbaths" aria-label="Bathrooms"><option value="">Baths</option><option value="1">1 bath</option><option value="2">2 baths</option><option value="3">3 baths</option><option value="4">4 baths</option><option value="5">5+ baths</option></select></label>'
       + '<label class="fsel"><select id="ptype" aria-label="Property type"><option value="">Type</option></select></label>'
       + '<div class="fprice"><input id="pmin" type="number" inputmode="numeric" placeholder="Min price" autocomplete="off"><span>–</span><input id="pmax" type="number" inputmode="numeric" placeholder="Max price" autocomplete="off"></div>'
+      + '<div class="fprice"><input id="pszmin" type="number" inputmode="numeric" placeholder="Min sq ft" autocomplete="off"><span>–</span><input id="pszmax" type="number" inputmode="numeric" placeholder="Max sq ft" autocomplete="off"></div>'
       + '</div>'
       + '<div class="chips" id="pchips"><button class="on" data-f="all">All</button><button data-f="new">New</button><button data-f="paid">Premium & featured</button><button data-f="sale">For sale</button><button data-f="rent">For rent</button><button data-f="comp">Market check</button><button data-f="drop">Price reduced</button></div></div>'
       + '<div id="pmain"></div><div class="sheet" id="psheet"></div>';
@@ -269,7 +270,7 @@
     if (PC) document.body.classList.add('pc');
     var L = [], SOLD = [], RENTED = [], coldList = [], tab = 'list', filt = 'all', q = '', sortBy = 'rec', lastUpdated = null, shown = [], drawn = 0, BATCH = 15, io = null, sheetHist = false, curRef = null, savedY = 0;
     var BR = [], brLoaded = false, brLoading = false, branch = 'all', agent = '', localStat = 'Loading…'; // default to All branches so the site is a full-stock search tool (the TV stays Local-only)
-    var fBeds = '', fBaths = '', fType = '', fMin = '', fMax = ''; // beds / baths / property-type / price filters
+    var fBeds = '', fBaths = '', fType = '', fMin = '', fMax = '', fSzMin = '', fSzMax = ''; // beds / baths / property-type / price / size (sq ft) filters
     var main = document.getElementById('pmain'), sheet = document.getElementById('psheet');
     // phone cards use the smaller Property Finder image (about 1/3 the bytes) to keep memory low on mobile browsers
     var sm = function(u){ return String(u).replace('/1312x894.', '/668x452.'); };
@@ -341,6 +342,8 @@
         if (fType && String(x.ptype || '').toLowerCase() !== fType.toLowerCase()) return false;
         if (fMin && (x.por || x.price == null || x.price < +fMin)) return false;
         if (fMax && (x.por || x.price == null || x.price > +fMax)) return false;
+        if (fSzMin && (!x.size || x.size < +fSzMin)) return false;
+        if (fSzMax && (!x.size || x.size > +fSzMax)) return false;
         if (al && String(x.agent || '').toLowerCase().indexOf(al) < 0) return false;
         if (ql && (x.loc + ' ' + x.area + ' ' + x.agent + ' ' + x.title + ' ' + x.ref).toLowerCase().indexOf(ql) < 0) return false;
         return true;
@@ -363,9 +366,9 @@
         main.innerHTML = pool.length ? '<div class="empty">Nothing matches' + (q || agent ? ' your filter' : ' this filter') + '.<br><button class="clear" id="pclear">Clear filters</button></div>' : (branch === 'local' ? skel() : '<div class="empty">No listings in this branch right now.</div>');
         var cb = document.getElementById('pclear');
         if (cb) cb.onclick = function(){
-          q = ''; agent = ''; fBeds = ''; fBaths = ''; fType = ''; fMin = ''; fMax = '';
+          q = ''; agent = ''; fBeds = ''; fBaths = ''; fType = ''; fMin = ''; fMax = ''; fSzMin = ''; fSzMax = '';
           document.getElementById('pq').value = ''; document.getElementById('pagent').value = ''; document.getElementById('pagentx').hidden = true;
-          document.getElementById('pbeds').value = ''; document.getElementById('pbaths').value = ''; document.getElementById('ptype').value = ''; document.getElementById('pmin').value = ''; document.getElementById('pmax').value = '';
+          document.getElementById('pbeds').value = ''; document.getElementById('pbaths').value = ''; document.getElementById('ptype').value = ''; document.getElementById('pmin').value = ''; document.getElementById('pmax').value = ''; document.getElementById('pszmin').value = ''; document.getElementById('pszmax').value = '';
           filt = 'all'; [].forEach.call(document.getElementById('pchips').children, function(b){ b.classList.toggle('on', b.getAttribute('data-f') === 'all'); }); render();
         };
         return;
@@ -741,6 +744,8 @@
     document.getElementById('ptype').addEventListener('change', function(){ fType = this.value; render(); window.scrollTo(0, 0); });
     document.getElementById('pmin').addEventListener('input', function(){ fMin = this.value.replace(/[^0-9]/g, ''); render(); });
     document.getElementById('pmax').addEventListener('input', function(){ fMax = this.value.replace(/[^0-9]/g, ''); render(); });
+    document.getElementById('pszmin').addEventListener('input', function(){ fSzMin = this.value.replace(/[^0-9]/g, ''); render(); });
+    document.getElementById('pszmax').addEventListener('input', function(){ fSzMax = this.value.replace(/[^0-9]/g, ''); render(); });
     var pending = false, loading = 0;
     function loadPhone(){
       if (loading && Date.now() - loading < 30000) return; // one request at a time, but never get stuck on a hung one
