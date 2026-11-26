@@ -496,13 +496,15 @@ if (await (async () => {
   const pctl = (a, p) => { a = a.slice().sort((x, y) => x - y); if (a.length === 1) return a[0]; const i = (a.length - 1) * p, lo = Math.floor(i), hi = Math.ceil(i); return a[lo] + (a[hi] - a[lo]) * (i - lo); };
   function summ(psfs) { if (!psfs.length) return null; let a = psfs.slice().sort((x, y) => x - y); if (a.length >= 8) { const lo = Math.floor(a.length * 0.05), hi = Math.ceil(a.length * 0.95); a = a.slice(lo, hi); } const m = Math.floor(a.length / 2), psf = a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; return { psf: Math.round(psf), n: psfs.length, lo: Math.round(pctl(a, .25)), hi: Math.round(pctl(a, .75)) }; }
   function byType(rows) { const types = {}; for (const r of rows) (types[r.type] = types[r.type] || []).push(r); const out = {}; for (const ty in types) { const rs = types[ty], bands = { all: rs.map(r => r.psf) }; rs.forEach(r => { (bands[r.band] = bands[r.band] || []).push(r.psf); }); const o = { latest: rs.map(r => r.date).sort().slice(-1)[0] || '' }; for (const bk in bands) { const s = summ(bands[bk]); if (s) o[bk] = s; } out[ty] = o; } return out; }
+  // a compact sample of the most recent real transactions, shown under the estimate so people see what it is built on
+  function samples(rows) { return rows.slice().sort((a, b) => (b.date < a.date ? -1 : 1)).slice(0, 14).map(r => ({ nm: r.bname, b: r.band, z: r.z, p: r.p, d: r.date, t: r.type })); }
   async function crawl(kind, slug) {
     const out = [];
     for (let p = 1; p <= COMM_PAGES; p++) {
       let rs; try { rs = findTx(await nextData('https://www.propertyfinder.ae/en/transactions/' + kind + '/dubai/' + slug + '?page=' + p)) || []; } catch (e) { break; }
       if (!rs.length) break;
       let oldHit = false;
-      for (const t of rs) { if (!t.price || !t.pricePerSqft || !t.transactionDate || t.isBulkTransaction) continue; if (Date.now() - Date.parse(t.transactionDate) > WINDOW_MS) { oldHit = true; continue; } out.push({ psf: (kind === 'rent' ? +t.pricePerSqft * 12 : +t.pricePerSqft), band: bandOf(t.bedrooms), type: ptBucket(t.propertyType), date: t.transactionDate, bslug: t.locationSlug || '', bname: t.locationName || '' }); }
+      for (const t of rs) { if (!t.price || !t.pricePerSqft || !t.transactionDate || t.isBulkTransaction) continue; if (Date.now() - Date.parse(t.transactionDate) > WINDOW_MS) { oldHit = true; continue; } out.push({ psf: (kind === 'rent' ? +t.pricePerSqft * 12 : +t.pricePerSqft), band: bandOf(t.bedrooms), type: ptBucket(t.propertyType), date: t.transactionDate, bslug: t.locationSlug || '', bname: t.locationName || '', p: t.price, z: Math.round(t.builtupArea || t.plotArea || 0) || null }); }
       if (rs.length < 10 || oldHit) break;
       await sleep(200);
     }
@@ -518,12 +520,12 @@ if (await (async () => {
     const sale = await crawl('sold', slug); await sleep(150);
     const rent = await crawl('rent', slug); await sleep(150);
     if (!sale.length && !rent.length) continue;
-    index.communities[slug] = { name, sale: byType(sale), rent: byType(rent) };
+    index.communities[slug] = { name, sale: byType(sale), rent: byType(rent), sx: samples(sale), rx: samples(rent) };
     for (const r of sale.concat(rent)) { if (r.bslug) (seenBuild[r.bslug] = seenBuild[r.bslug] || { name: r.bname, area: name, sale: [], rent: [] }); }
     sale.forEach(r => { if (r.bslug && seenBuild[r.bslug]) seenBuild[r.bslug].sale.push(r); });
     rent.forEach(r => { if (r.bslug && seenBuild[r.bslug]) seenBuild[r.bslug].rent.push(r); });
   }
-  for (const bslug in seenBuild) { const b = seenBuild[bslug]; if (b.sale.length + b.rent.length < 3) continue; index.buildings[bslug] = { name: b.name, area: b.area, sale: byType(b.sale), rent: byType(b.rent) }; }
+  for (const bslug in seenBuild) { const b = seenBuild[bslug]; if (b.sale.length + b.rent.length < 3) continue; index.buildings[bslug] = { name: b.name, area: b.area, sale: byType(b.sale), rent: byType(b.rent), sx: samples(b.sale), rx: samples(b.rent) }; }
 
   const idxJson = JSON.stringify(index);
   let prevIdx = null; try { if (existsSync('price-index.json')) prevIdx = readFileSync('price-index.json', 'utf8'); } catch (e) {}

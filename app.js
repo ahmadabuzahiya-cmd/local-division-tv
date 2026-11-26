@@ -1370,7 +1370,10 @@ var css = TOKENS
       + ".meta{display:flex;flex-wrap:wrap;gap:8px 10px;justify-content:center;margin-top:12px}.chip{font-size:12px;padding:5px 11px;border-radius:999px;background:var(--mist);color:var(--slate)}.chip.h{background:rgba(46,125,82,.12);color:var(--ok)}.chip.m{background:rgba(181,133,47,.14);color:var(--warn)}.chip.l{background:rgba(181,84,63,.12);color:var(--low)}"
       + ".note{font-size:13px;color:var(--muted);margin-top:12px;padding-top:10px;border-top:1px solid var(--mist)}.basis{font-size:13px;color:var(--slate);margin-top:10px}.basis b{font-weight:600}"
       + ".infoline{font-size:13px;color:var(--warn);background:rgba(181,133,47,.1);border-radius:9px;padding:9px 12px;margin-bottom:8px}"
-      + ".disc{font-size:12px;color:var(--muted);background:#fff;border:1px dashed rgba(31,52,64,.25);border-radius:10px;padding:12px 14px}.disc b{color:var(--slate)}";
+      + ".disc{font-size:12px;color:var(--muted);background:#fff;border:1px dashed rgba(31,52,64,.25);border-radius:10px;padding:12px 14px}.disc b{color:var(--slate)}"
+      + ".txwrap{margin-top:14px;padding-top:12px;border-top:1px solid var(--mist)}.txtitle{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-weight:600;margin-bottom:8px}"
+      + ".txtbl{width:100%;border-collapse:collapse;font-size:13px}.txtbl th{text-align:left;font-weight:600;text-transform:uppercase;letter-spacing:.05em;font-size:10px;color:var(--muted);padding:5px 8px;border-bottom:1px solid var(--line)}.txtbl td{padding:7px 8px;border-bottom:1px solid var(--mist);color:var(--slate)}.txtbl td.r,.txtbl th.r{text-align:right}"
+      + ".txfoot{font-size:11.5px;color:var(--muted);margin-top:9px}";
     document.head.appendChild(ST);
     document.title = 'Listing Price Estimator · Local Division';
 
@@ -1466,10 +1469,10 @@ var css = TOKENS
       function latest(sum){ return (sum && sum[deal] && sum[deal][ty]) ? sum[deal][ty].latest : ''; }
       // priority: same-building bed-band -> community bed-band (needs a healthier sample) -> same-building any bed -> community any bed
       var ordered = [];
-      if (bld) ordered.push({ v: cell(bld, bandKey), scope: loc.n, band: bandKey, latest: latest(bld), min: 3 });
-      if (comm) ordered.push({ v: cell(comm, bandKey), scope: comm.name + ' (community)', band: bandKey, latest: latest(comm), min: 5 });
-      if (bld) ordered.push({ v: cell(bld, 'all'), scope: loc.n, band: 'all', latest: latest(bld), min: 3 });
-      if (comm) ordered.push({ v: cell(comm, 'all'), scope: comm.name + ' (community)', band: 'all', latest: latest(comm), min: 1 });
+      if (bld) ordered.push({ v: cell(bld, bandKey), scope: loc.n, band: bandKey, latest: latest(bld), min: 3, src: bld });
+      if (comm) ordered.push({ v: cell(comm, bandKey), scope: comm.name + ' (community)', band: bandKey, latest: latest(comm), min: 5, src: comm });
+      if (bld) ordered.push({ v: cell(bld, 'all'), scope: loc.n, band: 'all', latest: latest(bld), min: 3, src: bld });
+      if (comm) ordered.push({ v: cell(comm, 'all'), scope: comm.name + ' (community)', band: 'all', latest: latest(comm), min: 1, src: comm });
       ordered = ordered.filter(function(c){ return c.v; });
       return ordered.find(function(c){ return c.v.n >= c.min; }) || ordered[0] || null;
     }
@@ -1494,7 +1497,26 @@ var css = TOKENS
         + '<div class="mid">midpoint <b>' + aed(eMid) + (deal==='rent'?'/yr':'') + '</b> · <b>' + Math.round(v.psf).toLocaleString() + ' AED/sq ft</b> × ' + size.toLocaleString() + ' sq ft</div>'
         + '<div class="meta"><span class="chip ' + conf[1] + '">' + conf[0] + ' confidence</span><span class="chip">' + n + ' comparable ' + (deal==='sale'?'sales':'rentals') + '</span>' + (pick.latest ? '<span class="chip">to ' + fmtDate(pick.latest) + '</span>' : '') + '</div></div>'
         + '<div class="basis">Based on <b>' + esc(pick.scope) + '</b>, ' + bandLabel(pick.band) + ' · median of the ' + n + ' most recent registered ' + (deal==='sale'?'sales':'rentals') + ' (inter-quartile range shown).</div>'
-        + (fellBack ? '<div class="note">Limited data for the exact building/bed-type, so this widens to ' + esc(pick.scope) + (pick.band==='all'?' across all bed-types':'') + '. Treat as a guide and sanity-check against live listings.</div>' : '');
+        + (fellBack ? '<div class="note">Limited data for the exact building/bed-type, so this widens to ' + esc(pick.scope) + (pick.band==='all'?' across all bed-types':'') + '. Treat as a guide and sanity-check against live listings.</div>' : '')
+        + txTable(pick.src, ty, pick.band);
+    }
+
+    // the recent registered transactions the estimate is built on, so people can see exactly what it refers to
+    function txTable(src, ty, band){
+      if (!src) return '';
+      var all = (deal === 'sale' ? src.sx : src.rx) || [];
+      var rows = all.filter(function(r){ return r.t === ty; });
+      if (band !== 'all' && band !== 'na'){ var b = rows.filter(function(r){ return r.b === band; }); if (b.length >= 3) rows = b; }
+      rows = rows.slice(0, 6);
+      if (!rows.length) return '';
+      var body = rows.map(function(r){
+        var beds = r.b === '0' ? 'Studio' : r.b === 'na' ? '—' : r.b === '4' ? '4+ bed' : r.b + ' bed';
+        var price = deal === 'rent' ? (aed(r.p) + '/yr') : aed(r.p);
+        return '<tr><td>' + esc(r.nm || '—') + '</td><td>' + beds + '</td><td class="r">' + (r.z ? r.z.toLocaleString() : '—') + '</td><td class="r">' + price + '</td><td class="r">' + fmtDate(r.d) + '</td></tr>';
+      }).join('');
+      return '<div class="txwrap"><div class="txtitle">Recent registered ' + (deal==='sale'?'sales':'rentals') + ' behind this estimate</div>'
+        + '<table class="txtbl"><thead><tr><th>Building</th><th>Beds</th><th class="r">Sq ft</th><th class="r">' + (deal==='sale'?'Sold for':'Rent/yr') + '</th><th class="r">Date</th></tr></thead><tbody>' + body + '</tbody></table>'
+        + '<div class="txfoot">Source: Dubai Land Department / Ejari, via Property Finder. These are the actual deals the median above is drawn from.</div></div>';
     }
     $('go').addEventListener('click', run);
   }
