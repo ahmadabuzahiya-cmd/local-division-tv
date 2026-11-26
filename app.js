@@ -1370,6 +1370,8 @@ var css = TOKENS
       + ".meta{display:flex;flex-wrap:wrap;gap:8px 10px;justify-content:center;margin-top:12px}.chip{font-size:12px;padding:5px 11px;border-radius:999px;background:var(--mist);color:var(--slate)}.chip.h{background:rgba(46,125,82,.12);color:var(--ok)}.chip.m{background:rgba(181,133,47,.14);color:var(--warn)}.chip.l{background:rgba(181,84,63,.12);color:var(--low)}"
       + ".note{font-size:13px;color:var(--muted);margin-top:12px;padding-top:10px;border-top:1px solid var(--mist)}.basis{font-size:13px;color:var(--slate);margin-top:10px}.basis b{font-weight:600}"
       + ".infoline{font-size:13px;color:var(--warn);background:rgba(181,133,47,.1);border-radius:9px;padding:9px 12px;margin-bottom:8px}"
+      + ".warn{font-size:13px;color:var(--warn);background:rgba(181,133,47,.12);border:1px solid rgba(181,133,47,.35);border-radius:9px;padding:9px 12px;margin-top:10px}.warn b{font-weight:600}"
+      + ".hint{font-size:12px;color:var(--muted);margin-top:8px}"
       + ".disc{font-size:12px;color:var(--muted);background:#fff;border:1px dashed rgba(31,52,64,.25);border-radius:10px;padding:12px 14px}.disc b{color:var(--slate)}"
       + ".txwrap{margin-top:14px;padding-top:12px;border-top:1px solid var(--mist)}.txtitle{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-weight:600;margin-bottom:8px}"
       + ".txtbl{width:100%;border-collapse:collapse;font-size:13px}.txtbl th{text-align:left;font-weight:600;text-transform:uppercase;letter-spacing:.05em;font-size:10px;color:var(--muted);padding:5px 8px;border-bottom:1px solid var(--line)}.txtbl td{padding:7px 8px;border-bottom:1px solid var(--mist);color:var(--slate)}.txtbl td.r,.txtbl th.r{text-align:right}"
@@ -1467,14 +1469,44 @@ var css = TOKENS
       // index shape: sum[deal][type][band]; fall back within the chosen type only (don't mix villas with apartments)
       function cell(sum, key){ if (!sum || !sum[deal] || !sum[deal][ty]) return null; return sum[deal][ty][key] || null; }
       function latest(sum){ return (sum && sum[deal] && sum[deal][ty]) ? sum[deal][ty].latest : ''; }
-      // priority: same-building bed-band -> community bed-band (needs a healthier sample) -> same-building any bed -> community any bed
+      var realBed = bandKey !== 'all' && bandKey !== 'na';
       var ordered = [];
-      if (bld) ordered.push({ v: cell(bld, bandKey), scope: loc.n, band: bandKey, latest: latest(bld), min: 3, src: bld });
-      if (comm) ordered.push({ v: cell(comm, bandKey), scope: comm.name + ' (community)', band: bandKey, latest: latest(comm), min: 5, src: comm });
-      if (bld) ordered.push({ v: cell(bld, 'all'), scope: loc.n, band: 'all', latest: latest(bld), min: 3, src: bld });
-      if (comm) ordered.push({ v: cell(comm, 'all'), scope: comm.name + ' (community)', band: 'all', latest: latest(comm), min: 1, src: comm });
+      if (realBed){
+        // SAME bedroom count only — building then community — before ANY bed-mixing. A 1-bed is never priced off a 2-bed.
+        if (bld)  ordered.push({ v: cell(bld, bandKey),  scope: loc.n,                     band: bandKey, latest: latest(bld),  min: 3, src: bld,  sameBed: true });
+        if (comm) ordered.push({ v: cell(comm, bandKey), scope: comm.name + ' (community)', band: bandKey, latest: latest(comm), min: 5, src: comm, sameBed: true });
+        if (bld)  ordered.push({ v: cell(bld, bandKey),  scope: loc.n,                     band: bandKey, latest: latest(bld),  min: 1, src: bld,  sameBed: true });
+        if (comm) ordered.push({ v: cell(comm, bandKey), scope: comm.name + ' (community)', band: bandKey, latest: latest(comm), min: 1, src: comm, sameBed: true });
+        // genuine last resort — no same-bed record anywhere: all bed-types, clearly flagged downstream
+        if (bld)  ordered.push({ v: cell(bld, 'all'),  scope: loc.n,                     band: 'all', latest: latest(bld),  min: 1, src: bld,  sameBed: false });
+        if (comm) ordered.push({ v: cell(comm, 'all'), scope: comm.name + ' (community)', band: 'all', latest: latest(comm), min: 1, src: comm, sameBed: false });
+      } else {
+        var k0 = bandKey === 'na' ? 'na' : 'all';
+        if (bld)  ordered.push({ v: cell(bld, k0),  scope: loc.n,                     band: k0, latest: latest(bld),  min: 1, src: bld,  sameBed: true });
+        if (comm) ordered.push({ v: cell(comm, k0), scope: comm.name + ' (community)', band: k0, latest: latest(comm), min: 1, src: comm, sameBed: true });
+      }
       ordered = ordered.filter(function(c){ return c.v; });
       return ordered.find(function(c){ return c.v.n >= c.min; }) || ordered[0] || null;
+    }
+
+    // Strict same-bedroom comparables + per-bed size envelopes (so a 1-bed is validated against 1-bed sizes only).
+    function comps(loc, pick, ty, band){
+      var bld = loc.k === 'b' ? INDEX.buildings[loc.s] : null;
+      function pool(src){ if (!src) return []; return ((deal === 'sale' ? src.sx : src.rx) || []).filter(function(r){ return r.t === ty; }); }
+      function env(rws){ var z = rws.map(function(r){ return r.z; }).filter(Boolean).sort(function(a,b){ return a-b; }); if (!z.length) return null; return { lo: z[0], hi: z[z.length-1], n: z.length }; }
+      var bldRows = pool(bld), commRows = pool(pick && pick.src);
+      var realBed = band !== 'all' && band !== 'na';
+      // size envelopes per bed-band, from the richest same-scope pool (building first, else community)
+      var envSrc = bldRows.length ? bldRows : commRows, byBand = {};
+      envSrc.forEach(function(r){ (byBand[r.b] = byBand[r.b] || []).push(r); });
+      var bandEnvs = {}; for (var k in byBand){ bandEnvs[k] = env(byBand[k]); }
+      // table rows: SAME bed only — building same-bed, else community same-bed, else none (never a wrong-bed row)
+      function sb(rws){ return realBed ? rws.filter(function(r){ return r.b === band; }) : rws; }
+      var bsb = sb(bldRows), csb = sb(commRows), rows, scopeName, specific;
+      if (bsb.length){ rows = bsb; scopeName = loc.n; specific = true; }
+      else if (csb.length){ rows = csb; scopeName = (pick && pick.src && pick.src.name) || loc.n; specific = false; }
+      else { rows = []; scopeName = loc.n; specific = true; }
+      return { rows: rows.slice(0, 8), scopeName: scopeName, specific: specific, realBed: realBed, bandEnvs: bandEnvs, selEnv: bandEnvs[band] || null };
     }
 
     function run(){
@@ -1484,45 +1516,57 @@ var css = TOKENS
       if (!size || size < 80){ out.innerHTML = '<div class="note">Enter a size in sq ft to get an estimate.</div>'; return; }
       var pick = resolve(selected, ty, bandKey);
       if (!pick){ var tyLabel = ty === 'villa' ? 'villa/townhouse' : ty === 'land' ? 'land' : 'apartment'; out.innerHTML = '<div class="infoline">No recent ' + tyLabel + ' ' + deal + ' transactions on record for <b>' + esc(selected.n) + '</b> yet. Try the community, a different type, or a nearby building.</div>'; return; }
+      var cmp = comps(selected, pick, ty, bandKey);
+      // SIZE LOCK: the entered size must match the chosen bed-band's real sizes; otherwise warn and point at the right band.
+      var guard = '';
+      if (cmp.realBed){
+        var se = cmp.selEnv;
+        if (se && (size < se.lo * 0.82 || size > se.hi * 1.18)){
+          var alt = ''; for (var bk in cmp.bandEnvs){ if (bk === bandKey || bk === 'na') continue; var e = cmp.bandEnvs[bk]; if (e && size >= e.lo * 0.9 && size <= e.hi * 1.1){ alt = bandLabel(bk); break; } }
+          guard = '<div class="warn"><b>Check the bedrooms.</b> ' + bandLabel(bandKey) + ' units here run ' + se.lo.toLocaleString() + '–' + se.hi.toLocaleString() + ' sq ft. '
+            + (alt ? ('A ' + size.toLocaleString() + ' sq ft unit here is a <b>' + alt + '</b>.') : ('Your ' + size.toLocaleString() + ' sq ft sits outside that range.')) + '</div>';
+        } else if (se){
+          guard = '<div class="hint">' + bandLabel(bandKey) + ' units here: ' + se.lo.toLocaleString() + '–' + se.hi.toLocaleString() + ' sq ft on record.</div>';
+        }
+      }
       // bound the spread so a noisy 3-comp inter-quartile range can't throw an absurd band (keep within +-22% of the median psf)
       var v = pick.v, loPsf = Math.max(v.lo, Math.round(v.psf * 0.78)), hiPsf = Math.min(v.hi, Math.round(v.psf * 1.22));
       if (loPsf > v.psf) loPsf = v.psf; if (hiPsf < v.psf) hiPsf = v.psf;
       var eLo = loPsf * size, eHi = hiPsf * size, eMid = v.psf * size;
       var n = v.n, conf = n >= 6 ? ['High','h'] : n >= 3 ? ['Medium','m'] : ['Low','l'];
       var per = deal === 'rent' ? ' <small>/ year</small>' : '';
-      var fellBack = (selected.k === 'b' && pick.scope !== selected.n) || pick.band === 'all';
+      var mixedBed = pick.band === 'all' && cmp.realBed;
+      var wideScope = /\(community\)/.test(pick.scope);
+      var note = mixedBed
+        ? 'No ' + bandLabel(bandKey) + ' ' + (deal==='sale'?'sales':'rentals') + ' on record here yet, so this is a rough guide from all bed-types in ' + esc(pick.src && pick.src.name || pick.scope) + '. Sanity-check against live ' + bandLabel(bandKey) + ' listings.'
+        : wideScope ? 'Limited ' + bandLabel(bandKey) + ' data in the exact building, so this uses ' + esc(pick.src && pick.src.name || pick.scope) + ' (' + bandLabel(bandKey) + ' only). Sanity-check against live listings.' : '';
       out.innerHTML =
         '<div class="rangewrap"><div class="rlabel">Suggested ' + (deal==='sale'?'list price':'asking rent') + ' · ' + esc(selected.n) + '</div>'
         + '<div class="range">' + (deal==='rent' ? kk(eLo) + ' – ' + kk(eHi) : 'AED ' + Math.round(eLo).toLocaleString() + ' – ' + Math.round(eHi).toLocaleString()) + per + '</div>'
         + '<div class="mid">midpoint <b>' + aed(eMid) + (deal==='rent'?'/yr':'') + '</b> · <b>' + Math.round(v.psf).toLocaleString() + ' AED/sq ft</b> × ' + size.toLocaleString() + ' sq ft</div>'
-        + '<div class="meta"><span class="chip ' + conf[1] + '">' + conf[0] + ' confidence</span><span class="chip">' + n + ' comparable ' + (deal==='sale'?'sales':'rentals') + '</span>' + (pick.latest ? '<span class="chip">to ' + fmtDate(pick.latest) + '</span>' : '') + '</div></div>'
-        + '<div class="basis">Based on <b>' + esc(pick.scope) + '</b>, ' + bandLabel(pick.band) + ' · median of the ' + n + ' most recent registered ' + (deal==='sale'?'sales':'rentals') + ' (inter-quartile range shown).</div>'
-        + (fellBack ? '<div class="note">Limited data for the exact building/bed-type, so this widens to ' + esc(pick.scope) + (pick.band==='all'?' across all bed-types':'') + '. Treat as a guide and sanity-check against live listings.</div>' : '')
-        + txTable(selected, pick, ty, bandKey);
+        + '<div class="meta"><span class="chip ' + conf[1] + '">' + conf[0] + ' confidence</span><span class="chip">' + n + ' comparable ' + bandLabel(pick.band==='all'?bandKey:pick.band) + ' ' + (deal==='sale'?'sales':'rentals') + '</span>' + (pick.latest ? '<span class="chip">to ' + fmtDate(pick.latest) + '</span>' : '') + '</div></div>'
+        + guard
+        + '<div class="basis">Based on <b>' + esc(pick.src && pick.src.name || pick.scope) + '</b>, ' + bandLabel(pick.band==='all'?bandKey:pick.band) + (mixedBed?' (all bed-types)':'') + ' · median of the ' + n + ' most recent registered ' + (deal==='sale'?'sales':'rentals') + ' (inter-quartile range shown).</div>'
+        + (note ? '<div class="note">' + note + '</div>' : '')
+        + txTable(cmp, bandKey);
     }
 
-    // The actual registered deals behind the estimate. When a specific building is selected we show THAT
-    // building's own transactions (with unit numbers) — not the general community — and only fall back to
-    // the community when the building has no separately registered deals of that type.
-    function txTable(loc, pick, ty, band){
-      var bld = loc.k === 'b' ? INDEX.buildings[loc.s] : null;
-      function pool(src){ if (!src) return []; return ((deal === 'sale' ? src.sx : src.rx) || []).filter(function(r){ return r.t === ty; }); }
-      var rows = pool(bld), scopeName = loc.n, specific = true;
-      if (rows.length < 2){ rows = pool(pick && pick.src); scopeName = (pick && pick.scope) || scopeName; specific = false; }
-      // prefer exact bed-band when there are enough of them
-      if (band !== 'all' && band !== 'na'){ var bb = rows.filter(function(r){ return r.b === band; }); if (bb.length >= 2) rows = bb; }
-      rows = rows.slice(0, 8);
-      if (!rows.length) return '';
-      var body = rows.map(function(r){
+    // The registered deals behind the estimate — strictly the SAME bedroom count, with unit numbers. Never a wrong-bed row.
+    function txTable(cmp, band){
+      var scopeName = cmp.scopeName;
+      if (!cmp.rows.length){
+        return '<div class="txwrap"><div class="txfoot">No separately registered ' + (band==='all'||band==='na'?'':bandLabel(band) + ' ') + (deal==='sale'?'sales':'rentals') + ' on record here yet — estimate uses the closest band above. Sanity-check against live listings.</div></div>';
+      }
+      var body = cmp.rows.map(function(r){
         var beds = r.b === '0' ? 'Studio' : r.b === 'na' ? '—' : r.b === '4' ? '4+ bed' : r.b + ' bed';
         var price = deal === 'rent' ? (aed(r.p) + '/yr') : aed(r.p);
         var unit = r.u ? ('Unit ' + esc(r.u)) : '—';
         return '<tr><td>' + esc(r.nm || scopeName) + '</td><td>' + unit + '</td><td>' + beds + '</td><td class="r">' + (r.z ? r.z.toLocaleString() : '—') + '</td><td class="r">' + price + '</td><td class="r">' + fmtDate(r.d) + '</td></tr>';
       }).join('');
-      var head = specific ? ('Recent registered ' + (deal==='sale'?'sales':'rentals') + ' in ' + esc(loc.n)) : ('Recent registered ' + (deal==='sale'?'sales':'rentals') + ' in ' + esc(scopeName));
+      var head = 'Recent registered ' + (deal==='sale'?'sales':'rentals') + ' in ' + esc(scopeName);
       return '<div class="txwrap"><div class="txtitle">' + head + '</div>'
         + '<table class="txtbl"><thead><tr><th>Building</th><th>Unit</th><th>Beds</th><th class="r">Sq ft</th><th class="r">' + (deal==='sale'?'Sold for':'Rent/yr') + '</th><th class="r">Date</th></tr></thead><tbody>' + body + '</tbody></table>'
-        + '<div class="txfoot">' + (specific ? 'Registered deals in this building' : 'This building had no separately registered ' + (deal==='sale'?'sales':'rentals') + ' of this type recently, so the nearest community is shown') + ' · Dubai Land Department / Ejari, via Property Finder.</div></div>';
+        + '<div class="txfoot">' + (cmp.specific ? 'Registered deals in this building' : 'Nearest community shown — no separately registered ' + (deal==='sale'?'sales':'rentals') + ' in this building') + ' · Dubai Land Department / Ejari, via Property Finder.</div></div>';
     }
     $('go').addEventListener('click', run);
   }
