@@ -442,3 +442,124 @@ if (prevDeals && prevDeals.fetchedAt && (Date.now() - Date.parse(prevDeals.fetch
     console.log('No deals found; keeping previous deals.json');
   }
 }
+
+// ========== Price index for the Listing Price Estimator ==========
+// Median AED/sqft by community (fallback) and by building (precise), sale + rent, per bedroom band,
+// from the most recent registered DLD transactions on Property Finder. Also emits a location dictionary
+// (every community + every building seen) that powers the estimator's instant typeahead. No CORS at build time.
+if (await (async () => {
+  // Rebuild the price index at most once a day — it is a large crawl and DLD data only updates daily.
+  try {
+    if (existsSync('price-index.json')) {
+      const prev = JSON.parse(readFileSync('price-index.json', 'utf8'));
+      if (prev.generatedAt && Date.now() - Date.parse(prev.generatedAt) < 20 * 3600e3) { console.log('Price index fresh (<20h); skipping rebuild'); return false; }
+    }
+  } catch (e) {}
+  return true;
+})()) {
+  const slugify = s => String(s || '').toLowerCase().replace(/[()&]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const band = b => { if (b == null || b === '') return 'na'; if (/studio/i.test(String(b))) return '0'; const n = parseInt(b, 10); return isNaN(n) ? 'na' : (n >= 4 ? '4' : String(n)); };
+  const med = a => { a = a.slice().sort((x, y) => x - y); const m = Math.floor(a.length / 2); return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; };
+  const pctl = (a, p) => { a = a.slice().sort((x, y) => x - y); if (a.length === 1) return a[0]; const i = (a.length - 1) * p, lo = Math.floor(i), hi = Math.ceil(i); return a[lo] + (a[hi] - a[lo]) * (i - lo); };
+  const findTx = o => { if (o && typeof o === 'object') { if (Array.isArray(o.transactionList)) return o.transactionList; for (const k in o) { const r = findTx(o[k]); if (r) return r; } } return null; };
+
+  // Broad Dubai community list (slug = PF transactions slug). The daily job can grow this freely.
+  const COMMUNITIES = [
+    ['downtown-dubai', 'Downtown Dubai'], ['dubai-marina', 'Dubai Marina'], ['business-bay', 'Business Bay'],
+    ['jumeirah-village-circle-jvc', 'Jumeirah Village Circle (JVC)'], ['palm-jumeirah', 'Palm Jumeirah'],
+    ['jumeirah-lake-towers-jlt', 'Jumeirah Lake Towers (JLT)'], ['dubai-hills-estate', 'Dubai Hills Estate'],
+    ['arabian-ranches', 'Arabian Ranches'], ['the-springs', 'The Springs'], ['the-meadows', 'The Meadows'],
+    ['emirates-living', 'Emirates Living'], ['jumeirah', 'Jumeirah'], ['umm-suqeim', 'Umm Suqeim'],
+    ['al-barsha', 'Al Barsha'], ['al-wasl', 'Al Wasl'], ['al-safa', 'Al Safa'], ['al-manara', 'Al Manara'],
+    ['umm-al-sheif', 'Umm Al Sheif'], ['nad-al-sheba', 'Nad Al Sheba'], ['al-khawaneej', 'Al Khawaneej'],
+    ['city-walk', 'City Walk'], ['madinat-jumeirah-living', 'Madinat Jumeirah Living'], ['la-mer', 'La Mer'],
+    ['district-one', 'District One'], ['mohammed-bin-rashid-city', 'Mohammed Bin Rashid City'],
+    ['dubai-islands', 'Dubai Islands'], ['dubai-creek-harbour', 'Dubai Creek Harbour'],
+    ['damac-hills', 'DAMAC Hills'], ['damac-hills-2', 'DAMAC Hills 2'], ['dubai-south', 'Dubai South'],
+    ['jumeirah-village-triangle-jvt', 'Jumeirah Village Triangle (JVT)'], ['jumeirah-golf-estates', 'Jumeirah Golf Estates'],
+    ['the-valley', 'The Valley'], ['town-square', 'Town Square'], ['dubai-sports-city', 'Dubai Sports City'],
+    ['motor-city', 'Motor City'], ['arjan', 'Arjan'], ['al-furjan', 'Al Furjan'],
+    ['international-city', 'International City'], ['discovery-gardens', 'Discovery Gardens'],
+    ['dubai-production-city-impz', 'Dubai Production City (IMPZ)'], ['remraam', 'Remraam'],
+    ['tilal-al-ghaf', 'Tilal Al Ghaf'], ['the-oasis', 'The Oasis'], ['emaar-south', 'Emaar South'],
+    ['bluewaters-island', 'Bluewaters Island'], ['emaar-beachfront', 'Emaar Beachfront'],
+    ['port-de-la-mer', 'Port De La Mer'], ['dubai-harbour', 'Dubai Harbour'],
+    ['dubai-maritime-city', 'Dubai Maritime City'], ['sobha-hartland', 'Sobha Hartland'],
+    ['meydan', 'Meydan'], ['al-jaddaf', 'Al Jaddaf'], ['jumeirah-park', 'Jumeirah Park'],
+    ['the-views', 'The Views'], ['the-greens', 'The Greens'], ['dubai-silicon-oasis', 'Dubai Silicon Oasis'],
+    ['liwan', 'Liwan'], ['dubailand', 'Dubailand'], ['the-world-islands', 'The World Islands'],
+    ['old-town', 'Old Town'], ['difc', 'DIFC'], ['za-abeel', 'Za\'abeel'], ['wasl-gate', 'Wasl Gate']
+  ];
+
+  // Curated building seed (team AOS + popular). The crawl auto-adds any building seen in community data.
+  const BUILDING_SEED = [
+    ['downtown-dubai-burj-khalifa', 'Burj Khalifa', 'Downtown Dubai'],
+    ['downtown-dubai-old-town-yansoon-yansoon-4', 'Yansoon 4', 'Old Town, Downtown Dubai']
+  ];
+
+  async function rows(kind, slug) {
+    try {
+      const pp = await nextData('https://www.propertyfinder.ae/en/transactions/' + kind + '/dubai/' + slug);
+      return (findTx(pp) || [])
+        .filter(t => t.price && t.pricePerSqft && t.transactionDate && !t.isBulkTransaction)
+        // PF's rent pricePerSqft is MONTHLY per sqft — x12 so a rent estimate (psf x size) reads as annual rent
+        .map(t => ({ psf: (kind === 'rent' ? +t.pricePerSqft * 12 : +t.pricePerSqft), band: band(t.bedrooms), ptype: t.propertyType || '', date: t.transactionDate, bslug: t.locationSlug || '', bname: t.locationName || '' }));
+    } catch (e) { return []; }
+  }
+  // Summarise rows into { band: {psf,n,lo,hi}, all:{...}, latest } — psf is median, lo/hi the inter-quartile range.
+  function summarise(rs) {
+    if (!rs.length) return null;
+    const out = {}, groups = { all: rs.map(r => r.psf) };
+    rs.forEach(r => { (groups[r.band] = groups[r.band] || []).push(r.psf); });
+    for (const k in groups) { const g = groups[k]; if (g.length) out[k] = { psf: Math.round(med(g)), n: g.length, lo: Math.round(pctl(g, .25)), hi: Math.round(pctl(g, .75)) }; }
+    out.latest = rs.map(r => r.date).sort().slice(-1)[0] || '';
+    return out;
+  }
+
+  const index = { generatedAt: new Date().toISOString(), communities: {}, buildings: {} };
+  const dict = {};            // slug -> {n, a, k, s}
+  const seenBuild = {};       // building slug -> {name, area, saleRows, rentRows}
+
+  for (const [slug, name] of COMMUNITIES) {
+    const sale = await rows('sold', slug); await sleep(500);
+    const rent = await rows('rent', slug); await sleep(500);
+    const cs = summarise(sale), cr = summarise(rent);
+    if (cs || cr) {
+      index.communities[slug] = { name, sale: cs, rent: cr };
+      dict[slug] = { n: name, a: 'Dubai · community', k: 'c', s: slug };
+    }
+    // collect buildings seen (for dictionary + candidate building index)
+    for (const r of sale.concat(rent)) {
+      if (!r.bslug) continue;
+      const bs = seenBuild[r.bslug] = seenBuild[r.bslug] || { name: r.bname, area: name, sale: [], rent: [] };
+    }
+    sale.forEach(r => { if (r.bslug && seenBuild[r.bslug]) seenBuild[r.bslug].sale.push(r); });
+    rent.forEach(r => { if (r.bslug && seenBuild[r.bslug]) seenBuild[r.bslug].rent.push(r); });
+    console.log('idx community', slug, 'sale', sale.length, 'rent', rent.length);
+  }
+
+  // Building-level: curated seed (fetch their own pages for a fuller read) + every building seen in the crawl.
+  for (const [slug, name, area] of BUILDING_SEED) {
+    const sale = await rows('sold', slug); await sleep(400);
+    const rent = await rows('rent', slug); await sleep(400);
+    const bs = summarise(sale), br = summarise(rent);
+    if (bs || br) { index.buildings[slug] = { name, area, sale: bs, rent: br }; dict[slug] = { n: name, a: area, k: 'b', s: slug }; }
+  }
+  // buildings discovered in community crawls — summarise from the rows we already have (no extra fetch)
+  for (const bslug in seenBuild) {
+    if (index.buildings[bslug]) continue;
+    const b = seenBuild[bslug];
+    const bs = summarise(b.sale), br = summarise(b.rent);
+    index.buildings[bslug] = { name: b.name, area: b.area, sale: bs, rent: br };
+    dict[bslug] = { n: b.name, a: b.area + ' · building', k: 'b', s: bslug };
+  }
+
+  const locs = Object.values(dict).sort((a, b) => (a.k === b.k ? a.n.localeCompare(b.n) : a.k === 'b' ? -1 : 1));
+  const idxJson = JSON.stringify(index);
+  let prevIdx = null; try { if (existsSync('price-index.json')) prevIdx = readFileSync('price-index.json', 'utf8'); } catch (e) {}
+  // compare ignoring the timestamp
+  const strip = s => s ? s.replace(/"generatedAt":"[^"]*",/, '') : s;
+  if (strip(prevIdx) !== strip(idxJson)) writeFileSync('price-index.json', idxJson);
+  writeFileSync('locations.json', JSON.stringify({ generatedAt: new Date().toISOString(), locs }));
+  console.log('Price index:', Object.keys(index.communities).length, 'communities,', Object.keys(index.buildings).length, 'buildings,', locs.length, 'dictionary entries');
+}

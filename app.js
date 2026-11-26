@@ -29,6 +29,7 @@
   var TV = /[?&]view=tv/.test(qp) || (!/[?&]view=(pc|phone)/.test(qp) && androidTV);
   var PHONE = !TV;                                   // the browse view runs for everything that isn't the slideshow
   var PC = PHONE && (/[?&]view=pc/.test(qp) || !isPhone); // wide layout on computers and ?view=pc; narrow only on real phones
+  var EST = /[?&]view=estimate/.test(qp);            // the Listing Price Estimator is its own standalone view
   // --- shared flags for the four alerts (market position, stale listing, inactive agent) ---
   var MKT_OVER = 0.25;   // red "price reduction required" when priced more than 25% above the cheapest rival
   var STALE_DAYS = 90;   // amber "remove or refresh" when live longer than this
@@ -51,6 +52,8 @@
     Object.keys(latest).forEach(function(a){ if (latest[a] && latest[a] < cut) out.push({name: a, days: daysLive(latest[a]) || 0, avatar: av[a] || ''}); });
     return out.sort(function(p, q){ return q.days - p.days; });
   }
+
+  if (EST){ estimator(); return; }
 
   if (PHONE){
     var pcss = TOKENS
@@ -248,7 +251,7 @@
       + BRANCHES.map(function(b){ return '<option value="' + b.key + '">' + e(b.name) + '</option>'; }).join('')
       + '<option value="all" selected>All branches</option>';
     var app = document.createElement('div');
-    app.innerHTML = '<div class="top"><div class="row1"><span class="logo">' + LOGO + '<em>Trust Better. Get Better.</em></span><label class="brsel"><select id="pbranch" aria-label="Branch">' + branchOpts + '</select></label></div>'
+    app.innerHTML = '<div class="top"><div class="row1"><span class="logo">' + LOGO + '<em>Trust Better. Get Better.</em></span><span style="display:flex;gap:10px;align-items:center"><a href="?view=estimate" style="font-size:13px;font-weight:600;color:var(--accent,#2C537A);text-decoration:none;border:1px solid var(--line,#DADADA);border-radius:8px;padding:7px 12px;white-space:nowrap">◇ Price estimator</a><label class="brsel"><select id="pbranch" aria-label="Branch">' + branchOpts + '</select></label></span></div>'
       + '<div class="stats" id="pstats">Loading…</div>'
       + '<div class="tabs"><button class="on" data-tab="list">Listings</button><button data-tab="sold">Just sold</button><button data-tab="rented">Just rented</button></div></div>'
       + '<div class="bar" id="pfilters"><div class="srow"><input class="search" id="pq" type="search" enterkeyhint="search" placeholder="Search area or agent" autocomplete="off">'
@@ -1338,4 +1341,161 @@ var css = TOKENS
   tv.addEventListener('click', function(){ var el = document.documentElement; if (!document.fullscreenElement && el.requestFullscreen) el.requestFullscreen(); });
   setTimeout(function(){ location.reload(); }, 6*3600000);
   document.addEventListener('keydown', function(e){ if (e.key === 'Enter' || e.key === 'f'){ var el = document.documentElement; if (!document.fullscreenElement && el.requestFullscreen) el.requestFullscreen(); } });
+
+  // ===================== Listing Price Estimator (?view=estimate) =====================
+  function estimator(){
+    var ST = document.createElement('style');
+    ST.textContent =
+      ":root{--slate:#1F343F;--denim:#2C537A;--powder:#7BA0B2;--sand:#D9B9A0;--gold:#A97A50;--mist:#EDE8E4;--paper:#F9F9F9;--line:#DADADA;--muted:rgba(31,52,64,.62);--ok:#2e7d52;--warn:#b5852f;--low:#b5543f}"
+      + "*{box-sizing:border-box;margin:0;padding:0}"
+      + "body{background:var(--mist);color:var(--slate);font-family:'Poppins','Segoe UI',system-ui,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased}"
+      + ".wrap{max-width:860px;margin:0 auto;padding:20px 16px 60px}"
+      + ".bk{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);text-decoration:none;margin-bottom:12px}.bk:hover{color:var(--denim)}"
+      + ".brandbar{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:4px}.brand{font-weight:600;color:var(--slate)}.est1{font-size:11px;text-transform:uppercase;letter-spacing:.18em;color:var(--muted)}"
+      + "h1{font-family:Georgia,serif;font-weight:400;font-size:28px;line-height:1.1;margin:.1em 0;color:var(--slate)}"
+      + ".sub{color:var(--muted);font-size:14px;margin-bottom:16px}"
+      + ".card{background:#fff;border:1px solid rgba(31,52,64,.1);border-radius:14px;padding:18px;margin-bottom:16px}"
+      + ".seg{display:inline-flex;background:var(--mist);border-radius:10px;padding:4px;gap:4px}.seg button{border:0;background:transparent;padding:8px 18px;border-radius:7px;font:inherit;font-weight:500;color:var(--muted);cursor:pointer}.seg button.on{background:var(--slate);color:#fff}"
+      + ".grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}@media(max-width:560px){.grid{grid-template-columns:1fr}}"
+      + "label.f{display:flex;flex-direction:column;gap:5px;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}label.f input,label.f select{font:inherit;font-size:15px;color:var(--slate);padding:11px 12px;border:1px solid var(--line);border-radius:9px;background:#fff;width:100%}label.f input:focus,label.f select:focus{outline:2px solid var(--powder);border-color:var(--powder)}"
+      + ".ac{position:relative}.acbox{position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:40;background:#fff;border:1px solid rgba(31,52,64,.14);border-radius:12px;box-shadow:0 12px 30px rgba(31,52,64,.16);overflow:hidden;display:none;max-height:300px;overflow-y:auto}.acbox.show{display:block}"
+      + ".acgrp{font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:var(--muted);padding:9px 14px 4px}.acitem{display:flex;align-items:center;gap:11px;padding:9px 14px;cursor:pointer}.acitem:hover,.acitem.hi{background:var(--mist)}"
+      + ".acicon{width:26px;height:26px;border-radius:7px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;background:rgba(44,83,122,.1);color:var(--denim);font-size:13px}.acitem.com .acicon{background:rgba(169,122,80,.14);color:var(--gold)}"
+      + ".acmain{min-width:0}.acname{font-size:14.5px;color:var(--slate);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.acname b{color:var(--denim)}.acsub{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.acnone{padding:14px;color:var(--muted);font-size:13px}"
+      + ".tips{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px;align-items:center}.tips .lead{font-size:12px;color:var(--muted)}.qchip{font-size:12.5px;border:1px solid var(--line);background:#fff;color:var(--slate);border-radius:999px;padding:5px 11px;cursor:pointer}.qchip:hover{border-color:var(--powder);background:var(--mist)}"
+      + ".help{margin-top:12px;background:var(--paper);border:1px solid var(--mist);border-radius:10px;padding:11px 13px;font-size:12.5px;color:var(--muted)}.help b{color:var(--slate)}.help ul{margin:6px 0 0;padding-left:18px}.help li{margin:2px 0}"
+      + ".go{margin-top:16px;width:100%;border:0;background:var(--denim);color:#fff;font:inherit;font-weight:600;font-size:16px;padding:14px;border-radius:10px;cursor:pointer}.go:hover{background:#24466a}"
+      + ".result{display:none}.result.show{display:block}.rangewrap{text-align:center;padding:6px 0 2px}.rlabel{font-size:11px;text-transform:uppercase;letter-spacing:.18em;color:var(--gold);font-weight:600}"
+      + ".range{font-family:Georgia,serif;font-size:clamp(26px,5.6vw,42px);color:var(--slate);line-height:1.05;margin:6px 0 2px}.range small{font-size:.42em;color:var(--muted);font-family:'Poppins',sans-serif}.mid{font-size:14px;color:var(--muted)}.mid b{color:var(--slate);font-weight:600}"
+      + ".meta{display:flex;flex-wrap:wrap;gap:8px 10px;justify-content:center;margin-top:12px}.chip{font-size:12px;padding:5px 11px;border-radius:999px;background:var(--mist);color:var(--slate)}.chip.h{background:rgba(46,125,82,.12);color:var(--ok)}.chip.m{background:rgba(181,133,47,.14);color:var(--warn)}.chip.l{background:rgba(181,84,63,.12);color:var(--low)}"
+      + ".note{font-size:13px;color:var(--muted);margin-top:12px;padding-top:10px;border-top:1px solid var(--mist)}.basis{font-size:13px;color:var(--slate);margin-top:10px}.basis b{font-weight:600}"
+      + ".infoline{font-size:13px;color:var(--warn);background:rgba(181,133,47,.1);border-radius:9px;padding:9px 12px;margin-bottom:8px}"
+      + ".disc{font-size:12px;color:var(--muted);background:#fff;border:1px dashed rgba(31,52,64,.25);border-radius:10px;padding:12px 14px}.disc b{color:var(--slate)}";
+    document.head.appendChild(ST);
+    document.title = 'Listing Price Estimator · Local Division';
+
+    var wrap = document.createElement('div'); wrap.className = 'wrap';
+    wrap.innerHTML =
+      '<a class="bk" href="?view=pc">← Back to stock</a>'
+      + '<div class="brandbar"><span class="brand">better<b>homes</b> · Local Division</span><span class="est1">Internal tool</span></div>'
+      + '<h1>Listing Price Estimator</h1>'
+      + '<div class="sub">Find the building, enter the property, get a suggested list range from registered DLD transactions.</div>'
+      + '<div class="card">'
+      + '<div class="seg" id="deal"><button data-d="sale" class="on">For sale</button><button data-d="rent">For rent</button></div>'
+      + '<div class="grid">'
+      + '<div class="ac" style="grid-column:1/-1"><label class="f">Building or community<input id="bldg" autocomplete="off" placeholder="Start typing… e.g. yansoon, marina, downtown"></label><div class="acbox" id="acbox"></div></div>'
+      + '<label class="f">Type<select id="type"><option value="apartment">Apartment</option><option value="villa">Villa / townhouse</option><option value="land">Land / plot</option></select></label>'
+      + '<label class="f">Bedrooms<select id="beds"><option value="0">Studio</option><option value="1" selected>1 bed</option><option value="2">2 bed</option><option value="3">3 bed</option><option value="4">4+ bed</option></select></label>'
+      + '<label class="f" style="grid-column:1/-1">Size (sq ft, built-up)<input id="size" type="number" inputmode="numeric" placeholder="e.g. 785"></label>'
+      + '</div>'
+      + '<div class="tips"><span class="lead">Quick picks:</span><button class="qchip" data-q="Burj Khalifa">Burj Khalifa</button><button class="qchip" data-q="Marina Gate">Marina Gate</button><button class="qchip" data-q="Downtown Dubai">Downtown Dubai</button></div>'
+      + '<div class="help"><b>Search faster:</b><ul><li>Type the <b>tower name</b> for apartments — "yansoon", "marina gate". Partial words work.</li><li>Type the <b>community</b> for villas, land or plots — "Al Khawaneej", "The Springs".</li><li>Always <b>pick from the list</b> so we match the exact DLD records.</li></ul></div>'
+      + '<button class="go" id="go">Estimate list price</button>'
+      + '</div>'
+      + '<div class="card result" id="result"></div>'
+      + '<div class="disc"><b>Internal pricing guidance — not a formal valuation.</b> Median price per sq ft from registered DLD sale and Ejari rental transactions, applied to the size entered. Doesn’t account for floor, view, upgrades or furnishing — apply your judgement. Not a Taqeem/RICS valuation.</div>';
+    document.body.appendChild(wrap);
+
+    var INDEX = null, LOCS = [], deal = 'sale', selected = null;
+    var $ = function(id){ return document.getElementById(id); };
+
+    Promise.all([
+      fetch('locations.json?v=' + Date.now()).then(function(r){ return r.json(); }).catch(function(){ return { locs: [] }; }),
+      fetch('price-index.json?v=' + Date.now()).then(function(r){ return r.json(); }).catch(function(){ return { communities:{}, buildings:{} }; })
+    ]).then(function(res){
+      LOCS = res[0].locs || []; INDEX = res[1];
+      if (!LOCS.length) $('bldg').placeholder = 'Data loading failed — refresh';
+    });
+
+    function esc(s){ return String(s).replace(/[&<>]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]; }); }
+    function mark(name, q){ if (!q) return esc(name); var i = name.toLowerCase().indexOf(q.toLowerCase()); if (i<0) return esc(name); return esc(name.slice(0,i)) + '<b>' + esc(name.slice(i,i+q.length)) + '</b>' + esc(name.slice(i+q.length)); }
+    function matches(l, toks){ var hay = (l.n + ' ' + l.a).toLowerCase(); return toks.every(function(t){ return hay.indexOf(t) >= 0; }); }
+
+    var box = $('acbox'), inp = $('bldg'), hi = -1, shown = [];
+    function renderAc(q){
+      var toks = q.toLowerCase().split(/\s+/).filter(Boolean);
+      var list = toks.length ? LOCS.filter(function(l){ return matches(l, toks); }) : LOCS.slice(0, 8);
+      list.sort(function(a, b){
+        var sa = a.n.toLowerCase().indexOf(toks[0]||'') === 0 ? 0 : 1, sb = b.n.toLowerCase().indexOf(toks[0]||'') === 0 ? 0 : 1;
+        if (sa !== sb) return sa - sb;
+        if (a.k !== b.k) return a.k === 'b' ? -1 : 1;
+        return a.n.localeCompare(b.n);
+      });
+      shown = list.slice(0, 12); hi = -1;
+      if (!shown.length){ box.innerHTML = '<div class="acnone">No match. Try the community name, or a shorter term.</div>'; box.classList.add('show'); return; }
+      var html = '', lastK = '';
+      shown.forEach(function(l, idx){
+        var kl = l.k === 'b' ? 'Buildings' : 'Communities';
+        if (kl !== lastK){ html += '<div class="acgrp">' + kl + '</div>'; lastK = kl; }
+        html += '<div class="acitem ' + (l.k==='b'?'bld':'com') + '" data-i="' + idx + '"><span class="acicon">' + (l.k==='b'?'▣':'◇') + '</span><span class="acmain"><div class="acname">' + mark(l.n, toks[0]||'') + '</div><div class="acsub">' + esc(l.a) + '</div></span></div>';
+      });
+      box.innerHTML = html; box.classList.add('show');
+    }
+    function choose(l){ selected = l; inp.value = l.n; box.classList.remove('show'); }
+    function paint(){ [].forEach.call(box.querySelectorAll('.acitem'), function(el, i){ el.classList.toggle('hi', i === hi); if (i === hi) el.scrollIntoView({ block:'nearest' }); }); }
+    inp.addEventListener('input', function(){ selected = null; renderAc(this.value); });
+    inp.addEventListener('focus', function(){ renderAc(this.value); });
+    box.addEventListener('mousedown', function(e){ var it = e.target.closest('.acitem'); if (it){ e.preventDefault(); choose(shown[+it.dataset.i]); } });
+    inp.addEventListener('keydown', function(e){
+      if (!box.classList.contains('show')) return;
+      if (e.key === 'ArrowDown'){ e.preventDefault(); hi = Math.min(hi+1, shown.length-1); paint(); }
+      else if (e.key === 'ArrowUp'){ e.preventDefault(); hi = Math.max(hi-1, 0); paint(); }
+      else if (e.key === 'Enter'){ if (hi>=0){ e.preventDefault(); choose(shown[hi]); } }
+      else if (e.key === 'Escape'){ box.classList.remove('show'); }
+    });
+    document.addEventListener('click', function(e){ if (!e.target.closest('.ac')) box.classList.remove('show'); });
+    [].forEach.call(document.querySelectorAll('.qchip'), function(c){ c.addEventListener('click', function(){ inp.value = c.dataset.q; inp.focus(); selected = null; renderAc(c.dataset.q); }); });
+
+    $('deal').addEventListener('click', function(e){ var b = e.target.closest('button'); if (!b) return; deal = b.dataset.d; [].forEach.call(this.children, function(x){ x.classList.toggle('on', x === b); }); });
+    $('type').addEventListener('change', function(){ var land = this.value === 'land'; $('beds').disabled = land; $('beds').style.opacity = land ? '.5' : '1'; });
+
+    function bandOf(){ if ($('type').value === 'land') return 'na'; return $('beds').value; }
+    function bandLabel(k){ return k === '0' ? 'Studio' : k === '4' ? '4+ bed' : k === 'na' ? 'all types' : k + ' bed'; }
+    function aed(n){ return 'AED ' + Math.round(n).toLocaleString('en-US'); }
+    function kk(n){ return Math.round(n/1000).toLocaleString('en-US') + 'k'; }
+    function fmtDate(d){ if (!d) return ''; var p = d.split('-'); return p.length===3 ? (['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+p[1]] + ' ' + p[0]) : d; }
+
+    function resolve(loc, bandKey){
+      var B = INDEX.buildings, C = INDEX.communities;
+      var bld = loc.k === 'b' ? B[loc.s] : null, comm = null;
+      if (loc.k === 'c') comm = C[loc.s];
+      else { var cn = (loc.a || '').replace(/ · (building|community)$/, ''); for (var k in C){ if (C[k].name === cn){ comm = C[k]; break; } } }
+      function cell(sum, key){ if (!sum || !sum[deal]) return null; return sum[deal][key] || null; }
+      // candidates in priority order: same-building bed-band -> community bed-band (needs a healthier sample)
+      // -> same-building any bed -> community any bed. Same-building comps are the most comparable, so they win even when few.
+      var ordered = [];
+      if (bld) ordered.push({ v: cell(bld, bandKey), scope: loc.n, band: bandKey, latest: (bld[deal]||{}).latest, min: 3 });
+      if (comm) ordered.push({ v: cell(comm, bandKey), scope: comm.name + ' (community)', band: bandKey, latest: (comm[deal]||{}).latest, min: 5 });
+      if (bld) ordered.push({ v: cell(bld, 'all'), scope: loc.n, band: 'all', latest: (bld[deal]||{}).latest, min: 3 });
+      if (comm) ordered.push({ v: cell(comm, 'all'), scope: comm.name + ' (community)', band: 'all', latest: (comm[deal]||{}).latest, min: 1 });
+      ordered = ordered.filter(function(c){ return c.v; });
+      return ordered.find(function(c){ return c.v.n >= c.min; }) || ordered[0] || null;
+    }
+
+    function run(){
+      var out = $('result'); out.classList.add('show');
+      var size = +$('size').value, bandKey = bandOf();
+      if (!selected){ out.innerHTML = '<div class="infoline">Pick a building or community from the list first so we match the exact DLD records.</div>'; return; }
+      if (!size || size < 80){ out.innerHTML = '<div class="note">Enter a size in sq ft to get an estimate.</div>'; return; }
+      var pick = resolve(selected, bandKey);
+      if (!pick){ out.innerHTML = '<div class="infoline">No recent ' + deal + ' transactions on record for <b>' + esc(selected.n) + '</b> yet. Try the community, or another nearby building.</div>'; return; }
+      // bound the spread so a noisy 3-comp inter-quartile range can't throw an absurd band (keep within +-22% of the median psf)
+      var v = pick.v, loPsf = Math.max(v.lo, Math.round(v.psf * 0.78)), hiPsf = Math.min(v.hi, Math.round(v.psf * 1.22));
+      if (loPsf > v.psf) loPsf = v.psf; if (hiPsf < v.psf) hiPsf = v.psf;
+      var eLo = loPsf * size, eHi = hiPsf * size, eMid = v.psf * size;
+      var n = v.n, conf = n >= 6 ? ['High','h'] : n >= 3 ? ['Medium','m'] : ['Low','l'];
+      var per = deal === 'rent' ? ' <small>/ year</small>' : '';
+      var fellBack = (!pick.bld && selected.k === 'b') || pick.band === 'all';
+      out.innerHTML =
+        '<div class="rangewrap"><div class="rlabel">Suggested ' + (deal==='sale'?'list price':'asking rent') + ' · ' + esc(selected.n) + '</div>'
+        + '<div class="range">' + (deal==='rent' ? kk(eLo) + ' – ' + kk(eHi) : 'AED ' + Math.round(eLo).toLocaleString() + ' – ' + Math.round(eHi).toLocaleString()) + per + '</div>'
+        + '<div class="mid">midpoint <b>' + aed(eMid) + (deal==='rent'?'/yr':'') + '</b> · <b>' + Math.round(v.psf).toLocaleString() + ' AED/sq ft</b> × ' + size.toLocaleString() + ' sq ft</div>'
+        + '<div class="meta"><span class="chip ' + conf[1] + '">' + conf[0] + ' confidence</span><span class="chip">' + n + ' comparable ' + (deal==='sale'?'sales':'rentals') + '</span>' + (pick.latest ? '<span class="chip">to ' + fmtDate(pick.latest) + '</span>' : '') + '</div></div>'
+        + '<div class="basis">Based on <b>' + esc(pick.scope) + '</b>, ' + bandLabel(pick.band) + ' · median of the ' + n + ' most recent registered ' + (deal==='sale'?'sales':'rentals') + ' (inter-quartile range shown).</div>'
+        + (fellBack ? '<div class="note">Limited data for the exact building/bed-type, so this widens to ' + esc(pick.scope) + (pick.band==='all'?' across all bed-types':'') + '. Treat as a guide and sanity-check against live listings.</div>' : '');
+    }
+    $('go').addEventListener('click', run);
+  }
+
+
 })();
