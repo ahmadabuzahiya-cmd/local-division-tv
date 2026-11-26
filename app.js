@@ -1506,7 +1506,29 @@ var css = TOKENS
       if (bsb.length){ rows = bsb; scopeName = loc.n; specific = true; }
       else if (csb.length){ rows = csb; scopeName = (pick && pick.src && pick.src.name) || loc.n; specific = false; }
       else { rows = []; scopeName = loc.n; specific = true; }
-      return { rows: rows.slice(0, 8), scopeName: scopeName, specific: specific, realBed: realBed, bandEnvs: bandEnvs, selEnv: bandEnvs[band] || null };
+      return { rows: rows.slice(0, 8), calcRows: rows, scopeName: scopeName, specific: specific, realBed: realBed, bandEnvs: bandEnvs, selEnv: bandEnvs[band] || null };
+    }
+
+    // The suggested figure is the AVERAGE of the actual comparable registered transactions (Property Finder / DLD),
+    // size-adjusted to the subject at the market rate — not a synthetic psf x size. Noisy registrations are trimmed.
+    function estFrom(rows, subj, cellV){
+      function med(a){ a = a.slice().sort(function(x,y){ return x-y; }); var m = Math.floor(a.length/2); return a.length%2 ? a[m] : (a[m-1]+a[m])/2; }
+      function pct(a,p){ a = a.slice().sort(function(x,y){ return x-y; }); var i = Math.min(a.length-1, Math.max(0, Math.round((a.length-1)*p))); return a[i]; }
+      var cl = (rows || []).filter(function(r){ return r.p > 0 && r.z > 0; });
+      if (cl.length >= 3){
+        var pm = med(cl.map(function(r){ return r.p/r.z; }));
+        var clean = cl.filter(function(r){ var q = r.p/r.z; return q >= pm*0.5 && q <= pm*2; }); // drop bulk / short-term / mis-registrations
+        if (clean.length >= 3) cl = clean;
+        var psf = med(cl.map(function(r){ return r.p/r.z; }));
+        var pred = cl.map(function(r){ return r.p + (subj - r.z) * psf; }).filter(function(x){ return x > 0; });
+        var mid = med(pred), lo = pct(pred, 0.25), hi = pct(pred, 0.75);
+        if (hi - lo < mid*0.12){ lo = mid*0.94; hi = mid*1.06; }
+        lo = Math.max(lo, mid*0.78); hi = Math.min(hi, mid*1.22);
+        return { lo: lo, hi: hi, mid: mid, psf: psf, n: cl.length, method: 'tx' };
+      }
+      var v = cellV, loP = Math.max(v.lo, Math.round(v.psf*0.78)), hiP = Math.min(v.hi, Math.round(v.psf*1.22));
+      if (loP > v.psf) loP = v.psf; if (hiP < v.psf) hiP = v.psf;
+      return { lo: loP*subj, hi: hiP*subj, mid: v.psf*subj, psf: v.psf, n: v.n, method: 'cell' };
     }
 
     function run(){
@@ -1529,11 +1551,9 @@ var css = TOKENS
           guard = '<div class="hint">' + bandLabel(bandKey) + ' units here: ' + se.lo.toLocaleString() + '–' + se.hi.toLocaleString() + ' sq ft on record.</div>';
         }
       }
-      // bound the spread so a noisy 3-comp inter-quartile range can't throw an absurd band (keep within +-22% of the median psf)
-      var v = pick.v, loPsf = Math.max(v.lo, Math.round(v.psf * 0.78)), hiPsf = Math.min(v.hi, Math.round(v.psf * 1.22));
-      if (loPsf > v.psf) loPsf = v.psf; if (hiPsf < v.psf) hiPsf = v.psf;
-      var eLo = loPsf * size, eHi = hiPsf * size, eMid = v.psf * size;
-      var n = v.n, conf = n >= 6 ? ['High','h'] : n >= 3 ? ['Medium','m'] : ['Low','l'];
+      var est = estFrom(cmp.calcRows, size, pick.v);
+      var eLo = est.lo, eHi = est.hi, eMid = est.mid, psf = est.psf;
+      var n = est.n, conf = n >= 6 ? ['High','h'] : n >= 3 ? ['Medium','m'] : ['Low','l'];
       var per = deal === 'rent' ? ' <small>/ year</small>' : '';
       var mixedBed = pick.band === 'all' && cmp.realBed;
       var wideScope = /\(community\)/.test(pick.scope);
@@ -1543,10 +1563,12 @@ var css = TOKENS
       out.innerHTML =
         '<div class="rangewrap"><div class="rlabel">Suggested ' + (deal==='sale'?'list price':'asking rent') + ' · ' + esc(selected.n) + '</div>'
         + '<div class="range">' + (deal==='rent' ? kk(eLo) + ' – ' + kk(eHi) : 'AED ' + Math.round(eLo).toLocaleString() + ' – ' + Math.round(eHi).toLocaleString()) + per + '</div>'
-        + '<div class="mid">midpoint <b>' + aed(eMid) + (deal==='rent'?'/yr':'') + '</b> · <b>' + Math.round(v.psf).toLocaleString() + ' AED/sq ft</b> × ' + size.toLocaleString() + ' sq ft</div>'
-        + '<div class="meta"><span class="chip ' + conf[1] + '">' + conf[0] + ' confidence</span><span class="chip">' + n + ' comparable ' + bandLabel(pick.band==='all'?bandKey:pick.band) + ' ' + (deal==='sale'?'sales':'rentals') + '</span>' + (pick.latest ? '<span class="chip">to ' + fmtDate(pick.latest) + '</span>' : '') + '</div></div>'
+        + '<div class="mid">midpoint <b>' + aed(eMid) + (deal==='rent'?'/yr':'') + '</b> · from <b>' + n + '</b> comparable ' + bandLabel(pick.band==='all'?bandKey:pick.band) + ' ' + (deal==='sale'?'sales':'rentals') + ' · ≈' + Math.round(psf).toLocaleString() + ' AED/sq ft</div>'
+        + '<div class="meta"><span class="chip ' + conf[1] + '">' + conf[0] + ' confidence</span><span class="chip">' + (est.method==='tx' ? 'average of ' + n + ' registered deals' : n + ' comparable ' + (deal==='sale'?'sales':'rentals')) + '</span>' + (pick.latest ? '<span class="chip">to ' + fmtDate(pick.latest) + '</span>' : '') + '</div></div>'
         + guard
-        + '<div class="basis">Based on <b>' + esc(pick.src && pick.src.name || pick.scope) + '</b>, ' + bandLabel(pick.band==='all'?bandKey:pick.band) + (mixedBed?' (all bed-types)':'') + ' · median of the ' + n + ' most recent registered ' + (deal==='sale'?'sales':'rentals') + ' (inter-quartile range shown).</div>'
+        + '<div class="basis">' + (est.method==='tx'
+            ? 'Average of the ' + n + ' most recent comparable ' + bandLabel(pick.band==='all'?bandKey:pick.band) + ' ' + (deal==='sale'?'sales':'rentals') + ' in <b>' + esc(pick.src && pick.src.name || pick.scope) + '</b>, size-adjusted to ' + size.toLocaleString() + ' sq ft (middle 50% shown).'
+            : 'Based on <b>' + esc(pick.src && pick.src.name || pick.scope) + '</b>, ' + bandLabel(pick.band==='all'?bandKey:pick.band) + (mixedBed?' (all bed-types)':'') + ' · ' + n + ' registered ' + (deal==='sale'?'sales':'rentals') + ' at the area rate (limited exact comparables).') + '</div>'
         + (note ? '<div class="note">' + note + '</div>' : '')
         + txTable(cmp, bandKey);
     }
