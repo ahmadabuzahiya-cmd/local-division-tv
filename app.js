@@ -1497,7 +1497,8 @@ var css = TOKENS
       var realBed = band !== 'all' && band !== 'na';
       // drop impossible sizes (some rows come through in sq metres or blank) so they can't poison psf / the comps table
       function okZ(z){ if (!z || z < 150) return false; return ty === 'land' ? z <= 2000000 : ty === 'villa' ? z <= 40000 : z <= 15000; }
-      function pool(src){ if (!src) return []; return ((deal === 'sale' ? src.sx : src.rx) || []).filter(function(r){ return r.t === ty && okZ(r.z); }); }
+      var CUT = (function(){ var d = new Date(); d.setMonth(d.getMonth() - 6); return d.toISOString().slice(0,10); })(); // only deals from the last 6 months
+      function pool(src){ if (!src) return []; return ((deal === 'sale' ? src.sx : src.rx) || []).filter(function(r){ return r.t === ty && okZ(r.z) && r.d && r.d >= CUT; }); }
       function sb(rws){ return realBed ? rws.filter(function(r){ return r.b === band; }) : rws; }
       function env(rws){ var z = rws.map(function(r){ return r.z; }).filter(Boolean).sort(function(a,b){ return a-b; }); if (!z.length) return null; return { lo: z[0], hi: z[z.length-1], n: z.length }; }
 
@@ -1575,7 +1576,7 @@ var css = TOKENS
       var est = estFrom(cmp.calcRows, size);
       var dealw = deal === 'sale' ? 'sales' : 'rentals', bl = bandLabel(bandKey);
       if (!est){
-        out.innerHTML = guard + '<div class="infoline">Not enough reliable registered ' + bl + ' ' + dealw + ' for <b>' + esc(selected.n) + '</b> or nearby towers to price this confidently right now. Try a nearby building, widen to the community, or check live listings.</div>' + (cmp.rows.length ? txTable(cmp, bandKey) : '');
+        out.innerHTML = guard + '<div class="infoline">Not enough registered ' + bl + ' ' + dealw + ' in the last 6 months for <b>' + esc(selected.n) + '</b> or nearby towers to price this confidently. Try a nearby building, widen to the community, or check live listings.</div>' + (cmp.rows.length ? txTable(cmp, bandKey) : '');
         return;
       }
       var eLo = est.lo, eHi = est.hi, eMid = est.mid, psf = est.psf;
@@ -1595,7 +1596,7 @@ var css = TOKENS
         + '<div class="meta"><span class="chip ' + conf[1] + '">' + conf[0] + ' confidence</span><span class="chip">' + (est.method==='tx' ? 'average of ' + n + ' registered deals' : n + ' comparable ' + dealw) + '</span>' + (latest ? '<span class="chip">to ' + fmtDate(latest) + '</span>' : '') + '</div></div>'
         + guard
         + '<div class="basis">' + (est.method==='tx'
-            ? 'Average of the ' + n + ' most recent comparable ' + bl + ' ' + dealw + ' ' + prep + '<b>' + esc(cmp.scopeName) + '</b>, size-adjusted to ' + size.toLocaleString() + ' sq ft (middle 50% shown).'
+            ? 'Average of ' + n + ' comparable ' + bl + ' ' + dealw + ' from the last 6 months ' + prep + '<b>' + esc(cmp.scopeName) + '</b>, size-adjusted to ' + size.toLocaleString() + ' sq ft (middle 50% shown).'
             : 'Based on <b>' + esc(cmp.scopeName) + '</b> · ' + n + ' registered ' + dealw + ' at the area rate (limited exact comparables).') + '</div>'
         + (note ? '<div class="note">' + note + '</div>' : '')
         + txTable(cmp, bandKey);
