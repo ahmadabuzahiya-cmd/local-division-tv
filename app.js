@@ -1498,25 +1498,31 @@ var css = TOKENS
         + '<div class="meta"><span class="chip ' + conf[1] + '">' + conf[0] + ' confidence</span><span class="chip">' + n + ' comparable ' + (deal==='sale'?'sales':'rentals') + '</span>' + (pick.latest ? '<span class="chip">to ' + fmtDate(pick.latest) + '</span>' : '') + '</div></div>'
         + '<div class="basis">Based on <b>' + esc(pick.scope) + '</b>, ' + bandLabel(pick.band) + ' · median of the ' + n + ' most recent registered ' + (deal==='sale'?'sales':'rentals') + ' (inter-quartile range shown).</div>'
         + (fellBack ? '<div class="note">Limited data for the exact building/bed-type, so this widens to ' + esc(pick.scope) + (pick.band==='all'?' across all bed-types':'') + '. Treat as a guide and sanity-check against live listings.</div>' : '')
-        + txTable(pick.src, ty, pick.band);
+        + txTable(selected, pick, ty, bandKey);
     }
 
-    // the recent registered transactions the estimate is built on, so people can see exactly what it refers to
-    function txTable(src, ty, band){
-      if (!src) return '';
-      var all = (deal === 'sale' ? src.sx : src.rx) || [];
-      var rows = all.filter(function(r){ return r.t === ty; });
-      if (band !== 'all' && band !== 'na'){ var b = rows.filter(function(r){ return r.b === band; }); if (b.length >= 3) rows = b; }
-      rows = rows.slice(0, 6);
+    // The actual registered deals behind the estimate. When a specific building is selected we show THAT
+    // building's own transactions (with unit numbers) — not the general community — and only fall back to
+    // the community when the building has no separately registered deals of that type.
+    function txTable(loc, pick, ty, band){
+      var bld = loc.k === 'b' ? INDEX.buildings[loc.s] : null;
+      function pool(src){ if (!src) return []; return ((deal === 'sale' ? src.sx : src.rx) || []).filter(function(r){ return r.t === ty; }); }
+      var rows = pool(bld), scopeName = loc.n, specific = true;
+      if (rows.length < 2){ rows = pool(pick && pick.src); scopeName = (pick && pick.scope) || scopeName; specific = false; }
+      // prefer exact bed-band when there are enough of them
+      if (band !== 'all' && band !== 'na'){ var bb = rows.filter(function(r){ return r.b === band; }); if (bb.length >= 2) rows = bb; }
+      rows = rows.slice(0, 8);
       if (!rows.length) return '';
       var body = rows.map(function(r){
         var beds = r.b === '0' ? 'Studio' : r.b === 'na' ? '—' : r.b === '4' ? '4+ bed' : r.b + ' bed';
         var price = deal === 'rent' ? (aed(r.p) + '/yr') : aed(r.p);
-        return '<tr><td>' + esc(r.nm || '—') + '</td><td>' + beds + '</td><td class="r">' + (r.z ? r.z.toLocaleString() : '—') + '</td><td class="r">' + price + '</td><td class="r">' + fmtDate(r.d) + '</td></tr>';
+        var unit = r.u ? ('Unit ' + esc(r.u)) : '—';
+        return '<tr><td>' + esc(r.nm || scopeName) + '</td><td>' + unit + '</td><td>' + beds + '</td><td class="r">' + (r.z ? r.z.toLocaleString() : '—') + '</td><td class="r">' + price + '</td><td class="r">' + fmtDate(r.d) + '</td></tr>';
       }).join('');
-      return '<div class="txwrap"><div class="txtitle">Recent registered ' + (deal==='sale'?'sales':'rentals') + ' behind this estimate</div>'
-        + '<table class="txtbl"><thead><tr><th>Building</th><th>Beds</th><th class="r">Sq ft</th><th class="r">' + (deal==='sale'?'Sold for':'Rent/yr') + '</th><th class="r">Date</th></tr></thead><tbody>' + body + '</tbody></table>'
-        + '<div class="txfoot">Source: Dubai Land Department / Ejari, via Property Finder. These are the actual deals the median above is drawn from.</div></div>';
+      var head = specific ? ('Recent registered ' + (deal==='sale'?'sales':'rentals') + ' in ' + esc(loc.n)) : ('Recent registered ' + (deal==='sale'?'sales':'rentals') + ' in ' + esc(scopeName));
+      return '<div class="txwrap"><div class="txtitle">' + head + '</div>'
+        + '<table class="txtbl"><thead><tr><th>Building</th><th>Unit</th><th>Beds</th><th class="r">Sq ft</th><th class="r">' + (deal==='sale'?'Sold for':'Rent/yr') + '</th><th class="r">Date</th></tr></thead><tbody>' + body + '</tbody></table>'
+        + '<div class="txfoot">' + (specific ? 'Registered deals in this building' : 'This building had no separately registered ' + (deal==='sale'?'sales':'rentals') + ' of this type recently, so the nearest community is shown') + ' · Dubai Land Department / Ejari, via Property Finder.</div></div>';
     }
     $('go').addEventListener('click', run);
   }

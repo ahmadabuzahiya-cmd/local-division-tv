@@ -497,14 +497,14 @@ if (await (async () => {
   function summ(psfs) { if (!psfs.length) return null; let a = psfs.slice().sort((x, y) => x - y); if (a.length >= 8) { const lo = Math.floor(a.length * 0.05), hi = Math.ceil(a.length * 0.95); a = a.slice(lo, hi); } const m = Math.floor(a.length / 2), psf = a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; return { psf: Math.round(psf), n: psfs.length, lo: Math.round(pctl(a, .25)), hi: Math.round(pctl(a, .75)) }; }
   function byType(rows) { const types = {}; for (const r of rows) (types[r.type] = types[r.type] || []).push(r); const out = {}; for (const ty in types) { const rs = types[ty], bands = { all: rs.map(r => r.psf) }; rs.forEach(r => { (bands[r.band] = bands[r.band] || []).push(r.psf); }); const o = { latest: rs.map(r => r.date).sort().slice(-1)[0] || '' }; for (const bk in bands) { const s = summ(bands[bk]); if (s) o[bk] = s; } out[ty] = o; } return out; }
   // a compact sample of the most recent real transactions, shown under the estimate so people see what it is built on
-  function samples(rows) { return rows.slice().sort((a, b) => (b.date < a.date ? -1 : 1)).slice(0, 14).map(r => ({ nm: r.bname, b: r.band, z: r.z, p: r.p, d: r.date, t: r.type })); }
+  function samples(rows) { return rows.slice().sort((a, b) => (b.date < a.date ? -1 : 1)).slice(0, 16).map(r => ({ nm: r.bname, u: r.u, b: r.band, z: r.z, p: r.p, d: r.date, t: r.type })); }
   async function crawl(kind, slug) {
     const out = [];
     for (let p = 1; p <= COMM_PAGES; p++) {
       let rs; try { rs = findTx(await nextData('https://www.propertyfinder.ae/en/transactions/' + kind + '/dubai/' + slug + '?page=' + p)) || []; } catch (e) { break; }
       if (!rs.length) break;
       let oldHit = false;
-      for (const t of rs) { if (!t.price || !t.pricePerSqft || !t.transactionDate || t.isBulkTransaction) continue; if (Date.now() - Date.parse(t.transactionDate) > WINDOW_MS) { oldHit = true; continue; } out.push({ psf: (kind === 'rent' ? +t.pricePerSqft * 12 : +t.pricePerSqft), band: bandOf(t.bedrooms), type: ptBucket(t.propertyType), date: t.transactionDate, bslug: t.locationSlug || '', bname: t.locationName || '', p: t.price, z: Math.round(t.builtupArea || t.plotArea || 0) || null }); }
+      for (const t of rs) { if (!t.price || !t.pricePerSqft || !t.transactionDate || t.isBulkTransaction) continue; if (Date.now() - Date.parse(t.transactionDate) > WINDOW_MS) { oldHit = true; continue; } out.push({ psf: (kind === 'rent' ? +t.pricePerSqft * 12 : +t.pricePerSqft), band: bandOf(t.bedrooms), type: ptBucket(t.propertyType), date: t.transactionDate, bslug: t.locationSlug || '', bname: t.locationName || '', p: t.price, z: Math.round(t.builtupArea || t.plotArea || 0) || null, u: t.propertyNumber || '' }); }
       if (rs.length < 10 || oldHit) break;
       await sleep(200);
     }
@@ -525,7 +525,31 @@ if (await (async () => {
     sale.forEach(r => { if (r.bslug && seenBuild[r.bslug]) seenBuild[r.bslug].sale.push(r); });
     rent.forEach(r => { if (r.bslug && seenBuild[r.bslug]) seenBuild[r.bslug].rent.push(r); });
   }
-  for (const bslug in seenBuild) { const b = seenBuild[bslug]; if (b.sale.length + b.rent.length < 3) continue; index.buildings[bslug] = { name: b.name, area: b.area, sale: byType(b.sale), rent: byType(b.rent), sx: samples(b.sale), rx: samples(b.rent) }; }
+  // Deepen building-level data: fetch each active building's OWN transactions (with unit numbers) so the
+  // estimator shows that building's real deals, not a community mix. Capped to keep the daily run bounded.
+  const BLD_PAGES = 3, BLD_MAX = 1200;
+  const active = Object.keys(seenBuild).filter(k => (seenBuild[k].sale.length + seenBuild[k].rent.length) >= 2).slice(0, BLD_MAX);
+  let bdone = 0;
+  for (const bslug of active) {
+    const b = seenBuild[bslug], bsale = [], brent = [];
+    for (const [kind, arr] of [['sold', bsale], ['rent', brent]]) {
+      for (let p = 1; p <= BLD_PAGES; p++) {
+        let rs; try { rs = findTx(await nextData('https://www.propertyfinder.ae/en/transactions/' + kind + '/dubai/' + bslug + '?page=' + p)) || []; } catch (e) { break; }
+        if (!rs.length) break;
+        let oldHit = false;
+        for (const t of rs) { if (!t.price || !t.pricePerSqft || !t.transactionDate || t.isBulkTransaction) continue; if (Date.now() - Date.parse(t.transactionDate) > WINDOW_MS) { oldHit = true; continue; } arr.push({ psf: (kind === 'rent' ? +t.pricePerSqft * 12 : +t.pricePerSqft), band: bandOf(t.bedrooms), type: ptBucket(t.propertyType), date: t.transactionDate, bname: t.locationName || b.name, p: t.price, z: Math.round(t.builtupArea || t.plotArea || 0) || null, u: t.propertyNumber || '' }); }
+        if (rs.length < 10 || oldHit) break;
+        await sleep(150);
+      }
+    }
+    const S = bsale.length ? bsale : b.sale, R = brent.length ? brent : b.rent;
+    if (S.length + R.length < 3) continue;
+    index.buildings[bslug] = { name: b.name, area: b.area, sale: byType(S), rent: byType(R), sx: samples(S), rx: samples(R) };
+    bdone++;
+  }
+  // remaining buildings (not deep-fetched) still listed from community-crawl rows if they have enough
+  for (const bslug in seenBuild) { if (index.buildings[bslug]) continue; const b = seenBuild[bslug]; if (b.sale.length + b.rent.length < 3) continue; index.buildings[bslug] = { name: b.name, area: b.area, sale: byType(b.sale), rent: byType(b.rent), sx: samples(b.sale), rx: samples(b.rent) }; }
+  console.log('Deep building fetch:', bdone, 'buildings');
 
   const idxJson = JSON.stringify(index);
   let prevIdx = null; try { if (existsSync('price-index.json')) prevIdx = readFileSync('price-index.json', 'utf8'); } catch (e) {}
