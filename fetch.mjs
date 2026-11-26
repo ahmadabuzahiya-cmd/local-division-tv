@@ -443,10 +443,12 @@ if (prevDeals && prevDeals.fetchedAt && (Date.now() - Date.parse(prevDeals.fetch
   }
 }
 
-// ========== Price index for the Listing Price Estimator ==========
-// Deep crawl of registered DLD transactions (Property Finder) → median AED/sqft by property type x bedroom band,
-// per community AND per building, sale + rent. Pagination gives large samples; outliers are trimmed; only the
-// last ~18 months count. Also emits a location dictionary (every community + building seen) for the typeahead.
+// ========== Location gazetteer + price index for the Listing Price Estimator ==========
+// 1) Harvest the full Dubai location gazetteer (name + transaction slug + area) from Property Finder's
+//    location search, so the estimator typeahead covers every community and building, like PF itself.
+// 2) Crawl registered DLD transactions for EVERY Dubai community the gazetteer returns → median AED/sqft
+//    by property type x bedroom band, per community and per building (deep pagination, outliers trimmed,
+//    last ~18 months). Rebuilds at most once a day. No CORS at build time.
 if (await (async () => {
   try {
     if (existsSync('price-index.json')) {
@@ -456,107 +458,76 @@ if (await (async () => {
   } catch (e) {}
   return true;
 })()) {
-  const WINDOW_MS = 18 * 30.44 * 864e5;   // only transactions from the last ~18 months
-  const COMM_PAGES = 12;                   // up to 120 most-recent per community per deal
+  const JHEAD = { ...HEADERS, accept: 'application/json' };
+  // ---------- 1. Gazetteer ----------
+  const LETTERS = ['a', 'e', 'i', 'o', 'u', 'y'];   // vowel sweep catches essentially every location name
+  const MAX_PAGES = 400;
+  const gaz = {};            // slug -> {n,s,k,a,c}
+  const commSlugs = {};      // community slug -> name
+  for (const ch of LETTERS) {
+    let page = 1, pages = 1;
+    do {
+      let j;
+      try { j = await (await fetch('https://www.propertyfinder.ae/b2c-location/api/v2/en/locations?filters.doc_types=location&filters.category_id=1&filters.name=' + ch + '&filters.use_popularity=true&pagination.limit=50&pagination.page=' + page, { headers: JHEAD })).json(); }
+      catch (e) { break; }
+      pages = (j.meta && j.meta.pages) || 1;
+      for (const it of (j.items || [])) {
+        const l = it.location; if (!l || l.url_city_slug !== 'dubai') continue;
+        const slug = l.current_language_slug, lt = l.location_type;
+        if (!slug || lt === 'CITY' || gaz[slug]) continue;
+        const parts = (l.path_name || '').split(',').map(s => s.trim()).filter(x => x && x !== 'Dubai');
+        const comm = parts[0] || l.name;
+        gaz[slug] = { n: l.name, s: slug, k: lt === 'COMMUNITY' ? 'c' : 'b', a: lt === 'COMMUNITY' ? 'Dubai · community' : ((parts.join(', ') || 'Dubai') + ' · ' + lt.toLowerCase()), c: comm };
+        if (lt === 'COMMUNITY') commSlugs[slug] = l.name;
+      }
+      page++; await sleep(140);
+    } while (page <= pages && page <= MAX_PAGES);
+    console.log('gazetteer letter', ch, '→', Object.keys(gaz).length, 'locations so far');
+  }
+  const locs = Object.values(gaz);
+  if (locs.length > 500) writeFileSync('locations.json', JSON.stringify({ generatedAt: new Date().toISOString(), locs }));
+  console.log('Gazetteer:', locs.length, 'Dubai locations,', Object.keys(commSlugs).length, 'communities');
+
+  // ---------- 2. Price index over every community the gazetteer found ----------
+  const WINDOW_MS = 18 * 30.44 * 864e5, COMM_PAGES = 8;
   const findTx = o => { if (o && typeof o === 'object') { if (Array.isArray(o.transactionList)) return o.transactionList; for (const k in o) { const r = findTx(o[k]); if (r) return r; } } return null; };
   const bandOf = b => { if (b == null || b === '') return 'na'; if (/studio/i.test(String(b))) return '0'; const n = parseInt(b, 10); return isNaN(n) ? 'na' : (n >= 4 ? '4' : String(n)); };
   const ptBucket = t => { t = String(t || '').toLowerCase(); if (/villa|townhouse/.test(t)) return 'villa'; if (/land|plot/.test(t)) return 'land'; return 'apartment'; };
   const pctl = (a, p) => { a = a.slice().sort((x, y) => x - y); if (a.length === 1) return a[0]; const i = (a.length - 1) * p, lo = Math.floor(i), hi = Math.ceil(i); return a[lo] + (a[hi] - a[lo]) * (i - lo); };
-  // median + IQR with 5/95 trimming for samples big enough to have outliers
-  function summ(psfs) {
-    if (!psfs.length) return null;
-    let a = psfs.slice().sort((x, y) => x - y);
-    if (a.length >= 8) { const lo = Math.floor(a.length * 0.05), hi = Math.ceil(a.length * 0.95); a = a.slice(lo, hi); }
-    const m = Math.floor(a.length / 2), psf = a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
-    return { psf: Math.round(psf), n: psfs.length, lo: Math.round(pctl(a, .25)), hi: Math.round(pctl(a, .75)) };
-  }
-  // rows -> { apartment:{sale/rent band map}, villa:{...}, land:{...} } for one deal direction
-  function byType(rows) {
-    const types = {};
-    for (const r of rows) (types[r.type] = types[r.type] || []).push(r);
-    const out = {};
-    for (const ty in types) {
-      const rs = types[ty], bands = { all: rs.map(r => r.psf) };
-      rs.forEach(r => { (bands[r.band] = bands[r.band] || []).push(r.psf); });
-      const o = { latest: rs.map(r => r.date).sort().slice(-1)[0] || '' };
-      for (const bk in bands) { const s = summ(bands[bk]); if (s) o[bk] = s; }
-      out[ty] = o;
-    }
-    return out;
-  }
+  function summ(psfs) { if (!psfs.length) return null; let a = psfs.slice().sort((x, y) => x - y); if (a.length >= 8) { const lo = Math.floor(a.length * 0.05), hi = Math.ceil(a.length * 0.95); a = a.slice(lo, hi); } const m = Math.floor(a.length / 2), psf = a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; return { psf: Math.round(psf), n: psfs.length, lo: Math.round(pctl(a, .25)), hi: Math.round(pctl(a, .75)) }; }
+  function byType(rows) { const types = {}; for (const r of rows) (types[r.type] = types[r.type] || []).push(r); const out = {}; for (const ty in types) { const rs = types[ty], bands = { all: rs.map(r => r.psf) }; rs.forEach(r => { (bands[r.band] = bands[r.band] || []).push(r.psf); }); const o = { latest: rs.map(r => r.date).sort().slice(-1)[0] || '' }; for (const bk in bands) { const s = summ(bands[bk]); if (s) o[bk] = s; } out[ty] = o; } return out; }
   async function crawl(kind, slug) {
     const out = [];
     for (let p = 1; p <= COMM_PAGES; p++) {
-      let rs;
-      try { rs = findTx(await nextData('https://www.propertyfinder.ae/en/transactions/' + kind + '/dubai/' + slug + '?page=' + p)) || []; } catch (e) { break; }
+      let rs; try { rs = findTx(await nextData('https://www.propertyfinder.ae/en/transactions/' + kind + '/dubai/' + slug + '?page=' + p)) || []; } catch (e) { break; }
       if (!rs.length) break;
       let oldHit = false;
-      for (const t of rs) {
-        if (!t.price || !t.pricePerSqft || !t.transactionDate || t.isBulkTransaction) continue;
-        if (Date.now() - Date.parse(t.transactionDate) > WINDOW_MS) { oldHit = true; continue; }
-        out.push({ psf: (kind === 'rent' ? +t.pricePerSqft * 12 : +t.pricePerSqft), band: bandOf(t.bedrooms), type: ptBucket(t.propertyType), date: t.transactionDate, bslug: t.locationSlug || '', bname: t.locationName || '' });
-      }
+      for (const t of rs) { if (!t.price || !t.pricePerSqft || !t.transactionDate || t.isBulkTransaction) continue; if (Date.now() - Date.parse(t.transactionDate) > WINDOW_MS) { oldHit = true; continue; } out.push({ psf: (kind === 'rent' ? +t.pricePerSqft * 12 : +t.pricePerSqft), band: bandOf(t.bedrooms), type: ptBucket(t.propertyType), date: t.transactionDate, bslug: t.locationSlug || '', bname: t.locationName || '' }); }
       if (rs.length < 10 || oldHit) break;
-      await sleep(250);
+      await sleep(200);
     }
     return out;
   }
 
-  const COMMUNITIES = [
-    ['downtown-dubai', 'Downtown Dubai'], ['dubai-marina', 'Dubai Marina'], ['business-bay', 'Business Bay'],
-    ['jumeirah-village-circle-jvc', 'Jumeirah Village Circle (JVC)'], ['palm-jumeirah', 'Palm Jumeirah'],
-    ['jumeirah-lake-towers-jlt', 'Jumeirah Lake Towers (JLT)'], ['dubai-hills-estate', 'Dubai Hills Estate'],
-    ['arabian-ranches', 'Arabian Ranches'], ['arabian-ranches-2', 'Arabian Ranches 2'], ['arabian-ranches-3', 'Arabian Ranches 3'],
-    ['the-springs', 'The Springs'], ['the-meadows', 'The Meadows'], ['the-lakes', 'The Lakes'],
-    ['jumeirah', 'Jumeirah'], ['umm-suqeim', 'Umm Suqeim'], ['al-barsha', 'Al Barsha'], ['al-wasl', 'Al Wasl'],
-    ['al-safa', 'Al Safa'], ['al-manara', 'Al Manara'], ['umm-al-sheif', 'Umm Al Sheif'], ['nad-al-sheba', 'Nad Al Sheba'],
-    ['al-khawaneej', 'Al Khawaneej'], ['city-walk', 'City Walk'], ['madinat-jumeirah-living', 'Madinat Jumeirah Living'],
-    ['la-mer', 'La Mer'], ['district-one', 'District One'], ['mohammed-bin-rashid-city', 'Mohammed Bin Rashid City'],
-    ['dubai-islands', 'Dubai Islands'], ['dubai-creek-harbour', 'Dubai Creek Harbour'], ['damac-hills', 'DAMAC Hills'],
-    ['damac-hills-2', 'DAMAC Hills 2'], ['dubai-south', 'Dubai South'], ['jumeirah-village-triangle-jvt', 'Jumeirah Village Triangle (JVT)'],
-    ['jumeirah-golf-estates', 'Jumeirah Golf Estates'], ['the-valley', 'The Valley'], ['town-square', 'Town Square'],
-    ['dubai-sports-city', 'Dubai Sports City'], ['motor-city', 'Motor City'], ['arjan', 'Arjan'], ['al-furjan', 'Al Furjan'],
-    ['international-city', 'International City'], ['discovery-gardens', 'Discovery Gardens'], ['dubai-production-city-impz', 'Dubai Production City (IMPZ)'],
-    ['remraam', 'Remraam'], ['tilal-al-ghaf', 'Tilal Al Ghaf'], ['the-oasis', 'The Oasis'], ['emaar-south', 'Emaar South'],
-    ['bluewaters-island', 'Bluewaters Island'], ['emaar-beachfront', 'Emaar Beachfront'], ['port-de-la-mer', 'Port De La Mer'],
-    ['dubai-harbour', 'Dubai Harbour'], ['dubai-maritime-city', 'Dubai Maritime City'], ['sobha-hartland', 'Sobha Hartland'],
-    ['meydan', 'Meydan'], ['al-jaddaf', 'Al Jaddaf'], ['jumeirah-park', 'Jumeirah Park'], ['the-views', 'The Views'],
-    ['the-greens', 'The Greens'], ['dubai-silicon-oasis', 'Dubai Silicon Oasis'], ['liwan', 'Liwan'], ['dubailand', 'Dubailand'],
-    ['old-town', 'Old Town'], ['difc', 'DIFC'], ['za-abeel', "Za'abeel"], ['wasl-gate', 'Wasl Gate'],
-    ['jumeirah-beach-residence-jbr', 'Jumeirah Beach Residence (JBR)'], ['palm-jebel-ali', 'Palm Jebel Ali'],
-    ['dubai-production-city', 'Dubai Production City'], ['green-community', 'Green Community'], ['the-sustainable-city', 'The Sustainable City'],
-    ['serena', 'Serena'], ['mudon', 'Mudon'], ['villanova', 'Villanova'], ['reem', 'Reem'], ['mira', 'Mira'], ['mira-oasis', 'Mira Oasis']
-  ];
-
+  // crawl every gazetteer community; fall back to a core list if the gazetteer came back empty
+  let communityList = Object.entries(commSlugs);
+  if (communityList.length < 20) communityList = [['downtown-dubai', 'Downtown Dubai'], ['dubai-marina', 'Dubai Marina'], ['business-bay', 'Business Bay'], ['jumeirah-village-circle-jvc', 'Jumeirah Village Circle (JVC)'], ['palm-jumeirah', 'Palm Jumeirah'], ['jumeirah-lake-towers-jlt', 'Jumeirah Lake Towers (JLT)']];
   const index = { generatedAt: new Date().toISOString(), communities: {}, buildings: {} };
-  const dict = {}, seenBuild = {};
-  for (const [slug, name] of COMMUNITIES) {
-    const sale = await crawl('sold', slug); await sleep(250);
-    const rent = await crawl('rent', slug); await sleep(250);
-    if (!sale.length && !rent.length) { console.log('idx', slug, 'no data'); continue; }
+  const seenBuild = {};
+  for (const [slug, name] of communityList) {
+    const sale = await crawl('sold', slug); await sleep(150);
+    const rent = await crawl('rent', slug); await sleep(150);
+    if (!sale.length && !rent.length) continue;
     index.communities[slug] = { name, sale: byType(sale), rent: byType(rent) };
-    dict[slug] = { n: name, a: 'Dubai · community', k: 'c', s: slug };
-    for (const r of sale.concat(rent)) {
-      if (!r.bslug) continue;
-      const b = seenBuild[r.bslug] = seenBuild[r.bslug] || { name: r.bname, area: name, sale: [], rent: [] };
-    }
+    for (const r of sale.concat(rent)) { if (r.bslug) (seenBuild[r.bslug] = seenBuild[r.bslug] || { name: r.bname, area: name, sale: [], rent: [] }); }
     sale.forEach(r => { if (r.bslug && seenBuild[r.bslug]) seenBuild[r.bslug].sale.push(r); });
     rent.forEach(r => { if (r.bslug && seenBuild[r.bslug]) seenBuild[r.bslug].rent.push(r); });
-    console.log('idx', slug, 'sale', sale.length, 'rent', rent.length);
   }
-  // building-level from the deep community crawl (list a building once it has a few of its own comps)
-  for (const bslug in seenBuild) {
-    const b = seenBuild[bslug];
-    if (b.sale.length + b.rent.length < 3) continue;
-    index.buildings[bslug] = { name: b.name, area: b.area, sale: byType(b.sale), rent: byType(b.rent) };
-    dict[bslug] = { n: b.name, a: b.area + ' · building', k: 'b', s: bslug };
-  }
+  for (const bslug in seenBuild) { const b = seenBuild[bslug]; if (b.sale.length + b.rent.length < 3) continue; index.buildings[bslug] = { name: b.name, area: b.area, sale: byType(b.sale), rent: byType(b.rent) }; }
 
-  const locs = Object.values(dict).sort((a, b) => (a.k === b.k ? a.n.localeCompare(b.n) : a.k === 'b' ? -1 : 1));
   const idxJson = JSON.stringify(index);
   let prevIdx = null; try { if (existsSync('price-index.json')) prevIdx = readFileSync('price-index.json', 'utf8'); } catch (e) {}
   const strip = s => s ? s.replace(/"generatedAt":"[^"]*",/, '') : s;
   if (strip(prevIdx) !== strip(idxJson)) writeFileSync('price-index.json', idxJson);
-  writeFileSync('locations.json', JSON.stringify({ generatedAt: new Date().toISOString(), locs }));
-  console.log('Price index:', Object.keys(index.communities).length, 'communities,', Object.keys(index.buildings).length, 'buildings,', locs.length, 'dictionary entries');
+  console.log('Price index:', Object.keys(index.communities).length, 'communities,', Object.keys(index.buildings).length, 'buildings');
 }

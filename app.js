@@ -1409,7 +1409,8 @@ var css = TOKENS
 
     function esc(s){ return String(s).replace(/[&<>]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]; }); }
     function mark(name, q){ if (!q) return esc(name); var i = name.toLowerCase().indexOf(q.toLowerCase()); if (i<0) return esc(name); return esc(name.slice(0,i)) + '<b>' + esc(name.slice(i,i+q.length)) + '</b>' + esc(name.slice(i+q.length)); }
-    function matches(l, toks){ var hay = (l.n + ' ' + l.a).toLowerCase(); return toks.every(function(t){ return hay.indexOf(t) >= 0; }); }
+    function subtitleOf(l){ return l.a || (l.k === 'c' ? 'Dubai · community' : ((l.c && l.c !== l.n ? l.c : 'Dubai') + ' · building')); }
+    function matches(l, toks){ var hay = (l.n + ' ' + subtitleOf(l)).toLowerCase(); return toks.every(function(t){ return hay.indexOf(t) >= 0; }); }
 
     var box = $('acbox'), inp = $('bldg'), hi = -1, shown = [];
     function renderAc(q){
@@ -1427,7 +1428,7 @@ var css = TOKENS
       shown.forEach(function(l, idx){
         var kl = l.k === 'b' ? 'Buildings' : 'Communities';
         if (kl !== lastK){ html += '<div class="acgrp">' + kl + '</div>'; lastK = kl; }
-        html += '<div class="acitem ' + (l.k==='b'?'bld':'com') + '" data-i="' + idx + '"><span class="acicon">' + (l.k==='b'?'▣':'◇') + '</span><span class="acmain"><div class="acname">' + mark(l.n, toks[0]||'') + '</div><div class="acsub">' + esc(l.a) + '</div></span></div>';
+        html += '<div class="acitem ' + (l.k==='b'?'bld':'com') + '" data-i="' + idx + '"><span class="acicon">' + (l.k==='b'?'▣':'◇') + '</span><span class="acmain"><div class="acname">' + mark(l.n, toks[0]||'') + '</div><div class="acsub">' + esc(subtitleOf(l)) + '</div></span></div>';
       });
       box.innerHTML = html; box.classList.add('show');
     }
@@ -1459,7 +1460,7 @@ var css = TOKENS
       var B = INDEX.buildings, C = INDEX.communities;
       var bld = loc.k === 'b' ? B[loc.s] : null, comm = null;
       if (loc.k === 'c') comm = C[loc.s];
-      else { var cn = (loc.a || '').replace(/ · (building|community)$/, ''); for (var k in C){ if (C[k].name === cn){ comm = C[k]; break; } } }
+      else { var cn = loc.c || (loc.a || '').replace(/ · [a-z]+$/, ''); for (var k in C){ if (C[k].name === cn){ comm = C[k]; break; } } }
       // index shape: sum[deal][type][band]; fall back within the chosen type only (don't mix villas with apartments)
       function cell(sum, key){ if (!sum || !sum[deal] || !sum[deal][ty]) return null; return sum[deal][ty][key] || null; }
       function latest(sum){ return (sum && sum[deal] && sum[deal][ty]) ? sum[deal][ty].latest : ''; }
