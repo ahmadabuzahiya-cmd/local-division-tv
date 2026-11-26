@@ -1455,37 +1455,38 @@ var css = TOKENS
     function kk(n){ return Math.round(n/1000).toLocaleString('en-US') + 'k'; }
     function fmtDate(d){ if (!d) return ''; var p = d.split('-'); return p.length===3 ? (['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+p[1]] + ' ' + p[0]) : d; }
 
-    function resolve(loc, bandKey){
+    function resolve(loc, ty, bandKey){
       var B = INDEX.buildings, C = INDEX.communities;
       var bld = loc.k === 'b' ? B[loc.s] : null, comm = null;
       if (loc.k === 'c') comm = C[loc.s];
       else { var cn = (loc.a || '').replace(/ · (building|community)$/, ''); for (var k in C){ if (C[k].name === cn){ comm = C[k]; break; } } }
-      function cell(sum, key){ if (!sum || !sum[deal]) return null; return sum[deal][key] || null; }
-      // candidates in priority order: same-building bed-band -> community bed-band (needs a healthier sample)
-      // -> same-building any bed -> community any bed. Same-building comps are the most comparable, so they win even when few.
+      // index shape: sum[deal][type][band]; fall back within the chosen type only (don't mix villas with apartments)
+      function cell(sum, key){ if (!sum || !sum[deal] || !sum[deal][ty]) return null; return sum[deal][ty][key] || null; }
+      function latest(sum){ return (sum && sum[deal] && sum[deal][ty]) ? sum[deal][ty].latest : ''; }
+      // priority: same-building bed-band -> community bed-band (needs a healthier sample) -> same-building any bed -> community any bed
       var ordered = [];
-      if (bld) ordered.push({ v: cell(bld, bandKey), scope: loc.n, band: bandKey, latest: (bld[deal]||{}).latest, min: 3 });
-      if (comm) ordered.push({ v: cell(comm, bandKey), scope: comm.name + ' (community)', band: bandKey, latest: (comm[deal]||{}).latest, min: 5 });
-      if (bld) ordered.push({ v: cell(bld, 'all'), scope: loc.n, band: 'all', latest: (bld[deal]||{}).latest, min: 3 });
-      if (comm) ordered.push({ v: cell(comm, 'all'), scope: comm.name + ' (community)', band: 'all', latest: (comm[deal]||{}).latest, min: 1 });
+      if (bld) ordered.push({ v: cell(bld, bandKey), scope: loc.n, band: bandKey, latest: latest(bld), min: 3 });
+      if (comm) ordered.push({ v: cell(comm, bandKey), scope: comm.name + ' (community)', band: bandKey, latest: latest(comm), min: 5 });
+      if (bld) ordered.push({ v: cell(bld, 'all'), scope: loc.n, band: 'all', latest: latest(bld), min: 3 });
+      if (comm) ordered.push({ v: cell(comm, 'all'), scope: comm.name + ' (community)', band: 'all', latest: latest(comm), min: 1 });
       ordered = ordered.filter(function(c){ return c.v; });
       return ordered.find(function(c){ return c.v.n >= c.min; }) || ordered[0] || null;
     }
 
     function run(){
       var out = $('result'); out.classList.add('show');
-      var size = +$('size').value, bandKey = bandOf();
+      var size = +$('size').value, bandKey = bandOf(), ty = $('type').value;
       if (!selected){ out.innerHTML = '<div class="infoline">Pick a building or community from the list first so we match the exact DLD records.</div>'; return; }
       if (!size || size < 80){ out.innerHTML = '<div class="note">Enter a size in sq ft to get an estimate.</div>'; return; }
-      var pick = resolve(selected, bandKey);
-      if (!pick){ out.innerHTML = '<div class="infoline">No recent ' + deal + ' transactions on record for <b>' + esc(selected.n) + '</b> yet. Try the community, or another nearby building.</div>'; return; }
+      var pick = resolve(selected, ty, bandKey);
+      if (!pick){ var tyLabel = ty === 'villa' ? 'villa/townhouse' : ty === 'land' ? 'land' : 'apartment'; out.innerHTML = '<div class="infoline">No recent ' + tyLabel + ' ' + deal + ' transactions on record for <b>' + esc(selected.n) + '</b> yet. Try the community, a different type, or a nearby building.</div>'; return; }
       // bound the spread so a noisy 3-comp inter-quartile range can't throw an absurd band (keep within +-22% of the median psf)
       var v = pick.v, loPsf = Math.max(v.lo, Math.round(v.psf * 0.78)), hiPsf = Math.min(v.hi, Math.round(v.psf * 1.22));
       if (loPsf > v.psf) loPsf = v.psf; if (hiPsf < v.psf) hiPsf = v.psf;
       var eLo = loPsf * size, eHi = hiPsf * size, eMid = v.psf * size;
       var n = v.n, conf = n >= 6 ? ['High','h'] : n >= 3 ? ['Medium','m'] : ['Low','l'];
       var per = deal === 'rent' ? ' <small>/ year</small>' : '';
-      var fellBack = (!pick.bld && selected.k === 'b') || pick.band === 'all';
+      var fellBack = (selected.k === 'b' && pick.scope !== selected.n) || pick.band === 'all';
       out.innerHTML =
         '<div class="rangewrap"><div class="rlabel">Suggested ' + (deal==='sale'?'list price':'asking rent') + ' · ' + esc(selected.n) + '</div>'
         + '<div class="range">' + (deal==='rent' ? kk(eLo) + ' – ' + kk(eHi) : 'AED ' + Math.round(eLo).toLocaleString() + ' – ' + Math.round(eHi).toLocaleString()) + per + '</div>'

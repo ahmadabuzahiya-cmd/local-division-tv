@@ -444,11 +444,10 @@ if (prevDeals && prevDeals.fetchedAt && (Date.now() - Date.parse(prevDeals.fetch
 }
 
 // ========== Price index for the Listing Price Estimator ==========
-// Median AED/sqft by community (fallback) and by building (precise), sale + rent, per bedroom band,
-// from the most recent registered DLD transactions on Property Finder. Also emits a location dictionary
-// (every community + every building seen) that powers the estimator's instant typeahead. No CORS at build time.
+// Deep crawl of registered DLD transactions (Property Finder) → median AED/sqft by property type x bedroom band,
+// per community AND per building, sale + rent. Pagination gives large samples; outliers are trimmed; only the
+// last ~18 months count. Also emits a location dictionary (every community + building seen) for the typeahead.
 if (await (async () => {
-  // Rebuild the price index at most once a day — it is a large crawl and DLD data only updates daily.
   try {
     if (existsSync('price-index.json')) {
       const prev = JSON.parse(readFileSync('price-index.json', 'utf8'));
@@ -457,107 +456,105 @@ if (await (async () => {
   } catch (e) {}
   return true;
 })()) {
-  const slugify = s => String(s || '').toLowerCase().replace(/[()&]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-  const band = b => { if (b == null || b === '') return 'na'; if (/studio/i.test(String(b))) return '0'; const n = parseInt(b, 10); return isNaN(n) ? 'na' : (n >= 4 ? '4' : String(n)); };
-  const med = a => { a = a.slice().sort((x, y) => x - y); const m = Math.floor(a.length / 2); return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; };
-  const pctl = (a, p) => { a = a.slice().sort((x, y) => x - y); if (a.length === 1) return a[0]; const i = (a.length - 1) * p, lo = Math.floor(i), hi = Math.ceil(i); return a[lo] + (a[hi] - a[lo]) * (i - lo); };
+  const WINDOW_MS = 18 * 30.44 * 864e5;   // only transactions from the last ~18 months
+  const COMM_PAGES = 12;                   // up to 120 most-recent per community per deal
   const findTx = o => { if (o && typeof o === 'object') { if (Array.isArray(o.transactionList)) return o.transactionList; for (const k in o) { const r = findTx(o[k]); if (r) return r; } } return null; };
+  const bandOf = b => { if (b == null || b === '') return 'na'; if (/studio/i.test(String(b))) return '0'; const n = parseInt(b, 10); return isNaN(n) ? 'na' : (n >= 4 ? '4' : String(n)); };
+  const ptBucket = t => { t = String(t || '').toLowerCase(); if (/villa|townhouse/.test(t)) return 'villa'; if (/land|plot/.test(t)) return 'land'; return 'apartment'; };
+  const pctl = (a, p) => { a = a.slice().sort((x, y) => x - y); if (a.length === 1) return a[0]; const i = (a.length - 1) * p, lo = Math.floor(i), hi = Math.ceil(i); return a[lo] + (a[hi] - a[lo]) * (i - lo); };
+  // median + IQR with 5/95 trimming for samples big enough to have outliers
+  function summ(psfs) {
+    if (!psfs.length) return null;
+    let a = psfs.slice().sort((x, y) => x - y);
+    if (a.length >= 8) { const lo = Math.floor(a.length * 0.05), hi = Math.ceil(a.length * 0.95); a = a.slice(lo, hi); }
+    const m = Math.floor(a.length / 2), psf = a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+    return { psf: Math.round(psf), n: psfs.length, lo: Math.round(pctl(a, .25)), hi: Math.round(pctl(a, .75)) };
+  }
+  // rows -> { apartment:{sale/rent band map}, villa:{...}, land:{...} } for one deal direction
+  function byType(rows) {
+    const types = {};
+    for (const r of rows) (types[r.type] = types[r.type] || []).push(r);
+    const out = {};
+    for (const ty in types) {
+      const rs = types[ty], bands = { all: rs.map(r => r.psf) };
+      rs.forEach(r => { (bands[r.band] = bands[r.band] || []).push(r.psf); });
+      const o = { latest: rs.map(r => r.date).sort().slice(-1)[0] || '' };
+      for (const bk in bands) { const s = summ(bands[bk]); if (s) o[bk] = s; }
+      out[ty] = o;
+    }
+    return out;
+  }
+  async function crawl(kind, slug) {
+    const out = [];
+    for (let p = 1; p <= COMM_PAGES; p++) {
+      let rs;
+      try { rs = findTx(await nextData('https://www.propertyfinder.ae/en/transactions/' + kind + '/dubai/' + slug + '?page=' + p)) || []; } catch (e) { break; }
+      if (!rs.length) break;
+      let oldHit = false;
+      for (const t of rs) {
+        if (!t.price || !t.pricePerSqft || !t.transactionDate || t.isBulkTransaction) continue;
+        if (Date.now() - Date.parse(t.transactionDate) > WINDOW_MS) { oldHit = true; continue; }
+        out.push({ psf: (kind === 'rent' ? +t.pricePerSqft * 12 : +t.pricePerSqft), band: bandOf(t.bedrooms), type: ptBucket(t.propertyType), date: t.transactionDate, bslug: t.locationSlug || '', bname: t.locationName || '' });
+      }
+      if (rs.length < 10 || oldHit) break;
+      await sleep(250);
+    }
+    return out;
+  }
 
-  // Broad Dubai community list (slug = PF transactions slug). The daily job can grow this freely.
   const COMMUNITIES = [
     ['downtown-dubai', 'Downtown Dubai'], ['dubai-marina', 'Dubai Marina'], ['business-bay', 'Business Bay'],
     ['jumeirah-village-circle-jvc', 'Jumeirah Village Circle (JVC)'], ['palm-jumeirah', 'Palm Jumeirah'],
     ['jumeirah-lake-towers-jlt', 'Jumeirah Lake Towers (JLT)'], ['dubai-hills-estate', 'Dubai Hills Estate'],
-    ['arabian-ranches', 'Arabian Ranches'], ['the-springs', 'The Springs'], ['the-meadows', 'The Meadows'],
-    ['emirates-living', 'Emirates Living'], ['jumeirah', 'Jumeirah'], ['umm-suqeim', 'Umm Suqeim'],
-    ['al-barsha', 'Al Barsha'], ['al-wasl', 'Al Wasl'], ['al-safa', 'Al Safa'], ['al-manara', 'Al Manara'],
-    ['umm-al-sheif', 'Umm Al Sheif'], ['nad-al-sheba', 'Nad Al Sheba'], ['al-khawaneej', 'Al Khawaneej'],
-    ['city-walk', 'City Walk'], ['madinat-jumeirah-living', 'Madinat Jumeirah Living'], ['la-mer', 'La Mer'],
-    ['district-one', 'District One'], ['mohammed-bin-rashid-city', 'Mohammed Bin Rashid City'],
-    ['dubai-islands', 'Dubai Islands'], ['dubai-creek-harbour', 'Dubai Creek Harbour'],
-    ['damac-hills', 'DAMAC Hills'], ['damac-hills-2', 'DAMAC Hills 2'], ['dubai-south', 'Dubai South'],
-    ['jumeirah-village-triangle-jvt', 'Jumeirah Village Triangle (JVT)'], ['jumeirah-golf-estates', 'Jumeirah Golf Estates'],
-    ['the-valley', 'The Valley'], ['town-square', 'Town Square'], ['dubai-sports-city', 'Dubai Sports City'],
-    ['motor-city', 'Motor City'], ['arjan', 'Arjan'], ['al-furjan', 'Al Furjan'],
-    ['international-city', 'International City'], ['discovery-gardens', 'Discovery Gardens'],
-    ['dubai-production-city-impz', 'Dubai Production City (IMPZ)'], ['remraam', 'Remraam'],
-    ['tilal-al-ghaf', 'Tilal Al Ghaf'], ['the-oasis', 'The Oasis'], ['emaar-south', 'Emaar South'],
-    ['bluewaters-island', 'Bluewaters Island'], ['emaar-beachfront', 'Emaar Beachfront'],
-    ['port-de-la-mer', 'Port De La Mer'], ['dubai-harbour', 'Dubai Harbour'],
-    ['dubai-maritime-city', 'Dubai Maritime City'], ['sobha-hartland', 'Sobha Hartland'],
-    ['meydan', 'Meydan'], ['al-jaddaf', 'Al Jaddaf'], ['jumeirah-park', 'Jumeirah Park'],
-    ['the-views', 'The Views'], ['the-greens', 'The Greens'], ['dubai-silicon-oasis', 'Dubai Silicon Oasis'],
-    ['liwan', 'Liwan'], ['dubailand', 'Dubailand'], ['the-world-islands', 'The World Islands'],
-    ['old-town', 'Old Town'], ['difc', 'DIFC'], ['za-abeel', 'Za\'abeel'], ['wasl-gate', 'Wasl Gate']
+    ['arabian-ranches', 'Arabian Ranches'], ['arabian-ranches-2', 'Arabian Ranches 2'], ['arabian-ranches-3', 'Arabian Ranches 3'],
+    ['the-springs', 'The Springs'], ['the-meadows', 'The Meadows'], ['the-lakes', 'The Lakes'],
+    ['jumeirah', 'Jumeirah'], ['umm-suqeim', 'Umm Suqeim'], ['al-barsha', 'Al Barsha'], ['al-wasl', 'Al Wasl'],
+    ['al-safa', 'Al Safa'], ['al-manara', 'Al Manara'], ['umm-al-sheif', 'Umm Al Sheif'], ['nad-al-sheba', 'Nad Al Sheba'],
+    ['al-khawaneej', 'Al Khawaneej'], ['city-walk', 'City Walk'], ['madinat-jumeirah-living', 'Madinat Jumeirah Living'],
+    ['la-mer', 'La Mer'], ['district-one', 'District One'], ['mohammed-bin-rashid-city', 'Mohammed Bin Rashid City'],
+    ['dubai-islands', 'Dubai Islands'], ['dubai-creek-harbour', 'Dubai Creek Harbour'], ['damac-hills', 'DAMAC Hills'],
+    ['damac-hills-2', 'DAMAC Hills 2'], ['dubai-south', 'Dubai South'], ['jumeirah-village-triangle-jvt', 'Jumeirah Village Triangle (JVT)'],
+    ['jumeirah-golf-estates', 'Jumeirah Golf Estates'], ['the-valley', 'The Valley'], ['town-square', 'Town Square'],
+    ['dubai-sports-city', 'Dubai Sports City'], ['motor-city', 'Motor City'], ['arjan', 'Arjan'], ['al-furjan', 'Al Furjan'],
+    ['international-city', 'International City'], ['discovery-gardens', 'Discovery Gardens'], ['dubai-production-city-impz', 'Dubai Production City (IMPZ)'],
+    ['remraam', 'Remraam'], ['tilal-al-ghaf', 'Tilal Al Ghaf'], ['the-oasis', 'The Oasis'], ['emaar-south', 'Emaar South'],
+    ['bluewaters-island', 'Bluewaters Island'], ['emaar-beachfront', 'Emaar Beachfront'], ['port-de-la-mer', 'Port De La Mer'],
+    ['dubai-harbour', 'Dubai Harbour'], ['dubai-maritime-city', 'Dubai Maritime City'], ['sobha-hartland', 'Sobha Hartland'],
+    ['meydan', 'Meydan'], ['al-jaddaf', 'Al Jaddaf'], ['jumeirah-park', 'Jumeirah Park'], ['the-views', 'The Views'],
+    ['the-greens', 'The Greens'], ['dubai-silicon-oasis', 'Dubai Silicon Oasis'], ['liwan', 'Liwan'], ['dubailand', 'Dubailand'],
+    ['old-town', 'Old Town'], ['difc', 'DIFC'], ['za-abeel', "Za'abeel"], ['wasl-gate', 'Wasl Gate'],
+    ['jumeirah-beach-residence-jbr', 'Jumeirah Beach Residence (JBR)'], ['palm-jebel-ali', 'Palm Jebel Ali'],
+    ['dubai-production-city', 'Dubai Production City'], ['green-community', 'Green Community'], ['the-sustainable-city', 'The Sustainable City'],
+    ['serena', 'Serena'], ['mudon', 'Mudon'], ['villanova', 'Villanova'], ['reem', 'Reem'], ['mira', 'Mira'], ['mira-oasis', 'Mira Oasis']
   ];
-
-  // Curated building seed (team AOS + popular). The crawl auto-adds any building seen in community data.
-  const BUILDING_SEED = [
-    ['downtown-dubai-burj-khalifa', 'Burj Khalifa', 'Downtown Dubai'],
-    ['downtown-dubai-old-town-yansoon-yansoon-4', 'Yansoon 4', 'Old Town, Downtown Dubai']
-  ];
-
-  async function rows(kind, slug) {
-    try {
-      const pp = await nextData('https://www.propertyfinder.ae/en/transactions/' + kind + '/dubai/' + slug);
-      return (findTx(pp) || [])
-        .filter(t => t.price && t.pricePerSqft && t.transactionDate && !t.isBulkTransaction)
-        // PF's rent pricePerSqft is MONTHLY per sqft — x12 so a rent estimate (psf x size) reads as annual rent
-        .map(t => ({ psf: (kind === 'rent' ? +t.pricePerSqft * 12 : +t.pricePerSqft), band: band(t.bedrooms), ptype: t.propertyType || '', date: t.transactionDate, bslug: t.locationSlug || '', bname: t.locationName || '' }));
-    } catch (e) { return []; }
-  }
-  // Summarise rows into { band: {psf,n,lo,hi}, all:{...}, latest } — psf is median, lo/hi the inter-quartile range.
-  function summarise(rs) {
-    if (!rs.length) return null;
-    const out = {}, groups = { all: rs.map(r => r.psf) };
-    rs.forEach(r => { (groups[r.band] = groups[r.band] || []).push(r.psf); });
-    for (const k in groups) { const g = groups[k]; if (g.length) out[k] = { psf: Math.round(med(g)), n: g.length, lo: Math.round(pctl(g, .25)), hi: Math.round(pctl(g, .75)) }; }
-    out.latest = rs.map(r => r.date).sort().slice(-1)[0] || '';
-    return out;
-  }
 
   const index = { generatedAt: new Date().toISOString(), communities: {}, buildings: {} };
-  const dict = {};            // slug -> {n, a, k, s}
-  const seenBuild = {};       // building slug -> {name, area, saleRows, rentRows}
-
+  const dict = {}, seenBuild = {};
   for (const [slug, name] of COMMUNITIES) {
-    const sale = await rows('sold', slug); await sleep(500);
-    const rent = await rows('rent', slug); await sleep(500);
-    const cs = summarise(sale), cr = summarise(rent);
-    if (cs || cr) {
-      index.communities[slug] = { name, sale: cs, rent: cr };
-      dict[slug] = { n: name, a: 'Dubai · community', k: 'c', s: slug };
-    }
-    // collect buildings seen (for dictionary + candidate building index)
+    const sale = await crawl('sold', slug); await sleep(250);
+    const rent = await crawl('rent', slug); await sleep(250);
+    if (!sale.length && !rent.length) { console.log('idx', slug, 'no data'); continue; }
+    index.communities[slug] = { name, sale: byType(sale), rent: byType(rent) };
+    dict[slug] = { n: name, a: 'Dubai · community', k: 'c', s: slug };
     for (const r of sale.concat(rent)) {
       if (!r.bslug) continue;
-      const bs = seenBuild[r.bslug] = seenBuild[r.bslug] || { name: r.bname, area: name, sale: [], rent: [] };
+      const b = seenBuild[r.bslug] = seenBuild[r.bslug] || { name: r.bname, area: name, sale: [], rent: [] };
     }
     sale.forEach(r => { if (r.bslug && seenBuild[r.bslug]) seenBuild[r.bslug].sale.push(r); });
     rent.forEach(r => { if (r.bslug && seenBuild[r.bslug]) seenBuild[r.bslug].rent.push(r); });
-    console.log('idx community', slug, 'sale', sale.length, 'rent', rent.length);
+    console.log('idx', slug, 'sale', sale.length, 'rent', rent.length);
   }
-
-  // Building-level: curated seed (fetch their own pages for a fuller read) + every building seen in the crawl.
-  for (const [slug, name, area] of BUILDING_SEED) {
-    const sale = await rows('sold', slug); await sleep(400);
-    const rent = await rows('rent', slug); await sleep(400);
-    const bs = summarise(sale), br = summarise(rent);
-    if (bs || br) { index.buildings[slug] = { name, area, sale: bs, rent: br }; dict[slug] = { n: name, a: area, k: 'b', s: slug }; }
-  }
-  // buildings discovered in community crawls — summarise from the rows we already have (no extra fetch)
+  // building-level from the deep community crawl (list a building once it has a few of its own comps)
   for (const bslug in seenBuild) {
-    if (index.buildings[bslug]) continue;
     const b = seenBuild[bslug];
-    const bs = summarise(b.sale), br = summarise(b.rent);
-    index.buildings[bslug] = { name: b.name, area: b.area, sale: bs, rent: br };
+    if (b.sale.length + b.rent.length < 3) continue;
+    index.buildings[bslug] = { name: b.name, area: b.area, sale: byType(b.sale), rent: byType(b.rent) };
     dict[bslug] = { n: b.name, a: b.area + ' · building', k: 'b', s: bslug };
   }
 
   const locs = Object.values(dict).sort((a, b) => (a.k === b.k ? a.n.localeCompare(b.n) : a.k === 'b' ? -1 : 1));
   const idxJson = JSON.stringify(index);
   let prevIdx = null; try { if (existsSync('price-index.json')) prevIdx = readFileSync('price-index.json', 'utf8'); } catch (e) {}
-  // compare ignoring the timestamp
   const strip = s => s ? s.replace(/"generatedAt":"[^"]*",/, '') : s;
   if (strip(prevIdx) !== strip(idxJson)) writeFileSync('price-index.json', idxJson);
   writeFileSync('locations.json', JSON.stringify({ generatedAt: new Date().toISOString(), locs }));
