@@ -1489,46 +1489,67 @@ var css = TOKENS
       return ordered.find(function(c){ return c.v.n >= c.min; }) || ordered[0] || null;
     }
 
-    // Strict same-bedroom comparables + per-bed size envelopes (so a 1-bed is validated against 1-bed sizes only).
+    // Strict same-bedroom comparables. When the exact building is thin, fall back to NEARBY buildings in the same
+    // sub-community/cluster (sibling slugs) — which carry unit numbers and are genuinely comparable — before ever
+    // widening to the whole community. A 1-bed in Yansoon 1 is compared to Yansoon/Old Town, not all of Downtown.
     function comps(loc, pick, ty, band){
-      var bld = loc.k === 'b' ? INDEX.buildings[loc.s] : null;
-      function pool(src){ if (!src) return []; return ((deal === 'sale' ? src.sx : src.rx) || []).filter(function(r){ return r.t === ty; }); }
-      function env(rws){ var z = rws.map(function(r){ return r.z; }).filter(Boolean).sort(function(a,b){ return a-b; }); if (!z.length) return null; return { lo: z[0], hi: z[z.length-1], n: z.length }; }
-      var bldRows = pool(bld), commRows = pool(pick && pick.src);
+      var Bld = INDEX.buildings, bld = loc.k === 'b' ? Bld[loc.s] : null;
       var realBed = band !== 'all' && band !== 'na';
-      // size envelopes per bed-band, from the richest same-scope pool (building first, else community)
-      var envSrc = bldRows.length ? bldRows : commRows, byBand = {};
+      // drop impossible sizes (some rows come through in sq metres or blank) so they can't poison psf / the comps table
+      function okZ(z){ if (!z || z < 150) return false; return ty === 'land' ? z <= 2000000 : ty === 'villa' ? z <= 40000 : z <= 15000; }
+      function pool(src){ if (!src) return []; return ((deal === 'sale' ? src.sx : src.rx) || []).filter(function(r){ return r.t === ty && okZ(r.z); }); }
+      function sb(rws){ return realBed ? rws.filter(function(r){ return r.b === band; }) : rws; }
+      function env(rws){ var z = rws.map(function(r){ return r.z; }).filter(Boolean).sort(function(a,b){ return a-b; }); if (!z.length) return null; return { lo: z[0], hi: z[z.length-1], n: z.length }; }
+
+      var bldRows = pool(bld), commRows = pool(pick && pick.src);
+
+      // sibling buildings sharing the deepest slug prefix beyond the community (same sub-community / cluster)
+      var nbAll = [];
+      if (loc.k === 'b'){
+        var segs = loc.s.split('-'), commDepth = 0;
+        for (var cs in INDEX.communities){ if (loc.s === cs || loc.s.indexOf(cs + '-') === 0){ var cd = cs.split('-').length; if (cd > commDepth) commDepth = cd; } }
+        var cands = [];
+        for (var bk in Bld){ if (bk === loc.s) continue; var x = bk.split('-'), i = 0; while (i < x.length && i < segs.length && x[i] === segs[i]) i++; if (i > commDepth) cands.push({ k: bk, d: i }); }
+        cands.sort(function(a,b){ return b.d - a.d; }); // closest first (deepest shared prefix)
+        for (var j = 0; j < cands.length && sb(nbAll).length < 10; j++){ nbAll = nbAll.concat(pool(Bld[cands[j].k])); }
+      }
+
+      // size envelopes per bed-band — building first, then neighbourhood, then community
+      var envSrc = bldRows.length ? bldRows : (nbAll.length ? nbAll : commRows), byBand = {};
       envSrc.forEach(function(r){ (byBand[r.b] = byBand[r.b] || []).push(r); });
       var bandEnvs = {}; for (var k in byBand){ bandEnvs[k] = env(byBand[k]); }
-      // table rows: SAME bed only — building same-bed, else community same-bed, else none (never a wrong-bed row)
-      function sb(rws){ return realBed ? rws.filter(function(r){ return r.b === band; }) : rws; }
-      var bsb = sb(bldRows), csb = sb(commRows), rows, scopeName, specific;
-      if (bsb.length){ rows = bsb; scopeName = loc.n; specific = true; }
-      else if (csb.length){ rows = csb; scopeName = (pick && pick.src && pick.src.name) || loc.n; specific = false; }
-      else { rows = []; scopeName = loc.n; specific = true; }
-      return { rows: rows.slice(0, 8), calcRows: rows, scopeName: scopeName, specific: specific, realBed: realBed, bandEnvs: bandEnvs, selEnv: bandEnvs[band] || null };
+
+      function pack(rows, scopeName, source){ return { rows: rows.slice(0, 8), calcRows: rows, scopeName: scopeName, source: source, specific: source === 'building', realBed: realBed, bandEnvs: bandEnvs, selEnv: bandEnvs[band] || null }; }
+
+      var bsb = sb(bldRows), nb = sb(nbAll), csb = sb(commRows);
+      if (bsb.length >= 3) return pack(bsb, loc.n, 'building');                        // enough of the building's own deals
+      var combined = bsb.concat(nb);                                                   // building's own + nearby cluster
+      if (combined.length >= 3) return pack(combined, loc.n, 'nbhd');                   // (carry unit numbers)
+      if (csb.length >= 3) return pack(csb, (pick && pick.src && pick.src.name) || loc.n, 'community');
+      return pack([], loc.n, 'none');                                                   // not enough reliable data — don't guess
     }
 
     // The suggested figure is the AVERAGE of the actual comparable registered transactions (Property Finder / DLD),
     // size-adjusted to the subject at the market rate — not a synthetic psf x size. Noisy registrations are trimmed.
-    function estFrom(rows, subj, cellV){
+    function estFrom(rows, subj){
       function med(a){ a = a.slice().sort(function(x,y){ return x-y; }); var m = Math.floor(a.length/2); return a.length%2 ? a[m] : (a[m-1]+a[m])/2; }
       function pct(a,p){ a = a.slice().sort(function(x,y){ return x-y; }); var i = Math.min(a.length-1, Math.max(0, Math.round((a.length-1)*p))); return a[i]; }
       var cl = (rows || []).filter(function(r){ return r.p > 0 && r.z > 0; });
-      if (cl.length >= 3){
-        var pm = med(cl.map(function(r){ return r.p/r.z; }));
-        var clean = cl.filter(function(r){ var q = r.p/r.z; return q >= pm*0.5 && q <= pm*2; }); // drop bulk / short-term / mis-registrations
-        if (clean.length >= 3) cl = clean;
-        var psf = med(cl.map(function(r){ return r.p/r.z; }));
-        var pred = cl.map(function(r){ return r.p + (subj - r.z) * psf; }).filter(function(x){ return x > 0; });
-        var mid = med(pred), lo = pct(pred, 0.25), hi = pct(pred, 0.75);
-        if (hi - lo < mid*0.12){ lo = mid*0.94; hi = mid*1.06; }
-        lo = Math.max(lo, mid*0.78); hi = Math.min(hi, mid*1.22);
-        return { lo: lo, hi: hi, mid: mid, psf: psf, n: cl.length, method: 'tx' };
-      }
-      var v = cellV, loP = Math.max(v.lo, Math.round(v.psf*0.78)), hiP = Math.min(v.hi, Math.round(v.psf*1.22));
-      if (loP > v.psf) loP = v.psf; if (hiP < v.psf) hiP = v.psf;
-      return { lo: loP*subj, hi: hiP*subj, mid: v.psf*subj, psf: v.psf, n: v.n, method: 'cell' };
+      if (cl.length < 3) return null; // price only from real comparable transactions — otherwise say so
+      var pm = med(cl.map(function(r){ return r.p/r.z; }));
+      var clean = cl.filter(function(r){ var q = r.p/r.z; return q >= pm*0.5 && q <= pm*2; }); // drop bulk / short-term / mis-registrations
+      if (clean.length >= 3) cl = clean;
+      var psf = med(cl.map(function(r){ return r.p/r.z; }));
+      var pred = cl.map(function(r){ return r.p + (subj - r.z) * psf; }).filter(function(x){ return x > 0; });
+      var mid = med(pred), lo = pct(pred, 0.25), hi = pct(pred, 0.75);
+      // never let the size-adjustment run outside what comparable units actually transacted for
+      var amts = cl.map(function(r){ return r.p; });
+      var aLo = pct(amts, 0.10), aHi = pct(amts, 0.90);
+      mid = Math.max(aLo*0.9, Math.min(aHi*1.1, mid));
+      if (hi - lo < mid*0.12){ lo = mid*0.94; hi = mid*1.06; }
+      lo = Math.max(lo, mid*0.78, aLo*0.85); hi = Math.min(hi, mid*1.22, aHi*1.15);
+      if (lo > mid) lo = mid; if (hi < mid) hi = mid;
+      return { lo: lo, hi: hi, mid: mid, psf: psf, n: cl.length, method: 'tx' };
     }
 
     function run(){
@@ -1551,24 +1572,31 @@ var css = TOKENS
           guard = '<div class="hint">' + bandLabel(bandKey) + ' units here: ' + se.lo.toLocaleString() + '–' + se.hi.toLocaleString() + ' sq ft on record.</div>';
         }
       }
-      var est = estFrom(cmp.calcRows, size, pick.v);
+      var est = estFrom(cmp.calcRows, size);
+      var dealw = deal === 'sale' ? 'sales' : 'rentals', bl = bandLabel(bandKey);
+      if (!est){
+        out.innerHTML = guard + '<div class="infoline">Not enough reliable registered ' + bl + ' ' + dealw + ' for <b>' + esc(selected.n) + '</b> or nearby towers to price this confidently right now. Try a nearby building, widen to the community, or check live listings.</div>' + (cmp.rows.length ? txTable(cmp, bandKey) : '');
+        return;
+      }
       var eLo = est.lo, eHi = est.hi, eMid = est.mid, psf = est.psf;
       var n = est.n, conf = n >= 6 ? ['High','h'] : n >= 3 ? ['Medium','m'] : ['Low','l'];
       var per = deal === 'rent' ? ' <small>/ year</small>' : '';
-      var mixedBed = pick.band === 'all' && cmp.realBed;
-      var wideScope = /\(community\)/.test(pick.scope);
-      var note = mixedBed
-        ? 'No ' + bandLabel(bandKey) + ' ' + (deal==='sale'?'sales':'rentals') + ' on record here yet, so this is a rough guide from all bed-types in ' + esc(pick.src && pick.src.name || pick.scope) + '. Sanity-check against live ' + bandLabel(bandKey) + ' listings.'
-        : wideScope ? 'Limited ' + bandLabel(bandKey) + ' data in the exact building, so this uses ' + esc(pick.src && pick.src.name || pick.scope) + ' (' + bandLabel(bandKey) + ' only). Sanity-check against live listings.' : '';
+      var latest = cmp.calcRows.reduce(function(m,r){ return r.d > m ? r.d : m; }, '') || pick.latest;
+      var prep = cmp.source === 'nbhd' ? 'near ' : 'in ';
+      var note = cmp.source === 'nbhd'
+        ? esc(selected.n) + ' has few registered ' + bl + ' ' + dealw + ' of its own, so this is based on nearby buildings in the same cluster (listed below). Sanity-check against live listings.'
+        : cmp.source === 'community'
+          ? 'Limited ' + bl + ' data in the exact building, so this widens to ' + esc(cmp.scopeName) + ' (' + bl + ' only). Sanity-check against live listings.'
+          : cmp.source === 'none' ? 'No comparable registered ' + bl + ' ' + dealw + ' on record yet — treat the figure as indicative.' : '';
       out.innerHTML =
         '<div class="rangewrap"><div class="rlabel">Suggested ' + (deal==='sale'?'list price':'asking rent') + ' · ' + esc(selected.n) + '</div>'
         + '<div class="range">' + (deal==='rent' ? kk(eLo) + ' – ' + kk(eHi) : 'AED ' + Math.round(eLo).toLocaleString() + ' – ' + Math.round(eHi).toLocaleString()) + per + '</div>'
-        + '<div class="mid">midpoint <b>' + aed(eMid) + (deal==='rent'?'/yr':'') + '</b> · from <b>' + n + '</b> comparable ' + bandLabel(pick.band==='all'?bandKey:pick.band) + ' ' + (deal==='sale'?'sales':'rentals') + ' · ≈' + Math.round(psf).toLocaleString() + ' AED/sq ft</div>'
-        + '<div class="meta"><span class="chip ' + conf[1] + '">' + conf[0] + ' confidence</span><span class="chip">' + (est.method==='tx' ? 'average of ' + n + ' registered deals' : n + ' comparable ' + (deal==='sale'?'sales':'rentals')) + '</span>' + (pick.latest ? '<span class="chip">to ' + fmtDate(pick.latest) + '</span>' : '') + '</div></div>'
+        + '<div class="mid">midpoint <b>' + aed(eMid) + (deal==='rent'?'/yr':'') + '</b> · from <b>' + n + '</b> comparable ' + bl + ' ' + dealw + ' · ≈' + Math.round(psf).toLocaleString() + ' AED/sq ft</div>'
+        + '<div class="meta"><span class="chip ' + conf[1] + '">' + conf[0] + ' confidence</span><span class="chip">' + (est.method==='tx' ? 'average of ' + n + ' registered deals' : n + ' comparable ' + dealw) + '</span>' + (latest ? '<span class="chip">to ' + fmtDate(latest) + '</span>' : '') + '</div></div>'
         + guard
         + '<div class="basis">' + (est.method==='tx'
-            ? 'Average of the ' + n + ' most recent comparable ' + bandLabel(pick.band==='all'?bandKey:pick.band) + ' ' + (deal==='sale'?'sales':'rentals') + ' in <b>' + esc(pick.src && pick.src.name || pick.scope) + '</b>, size-adjusted to ' + size.toLocaleString() + ' sq ft (middle 50% shown).'
-            : 'Based on <b>' + esc(pick.src && pick.src.name || pick.scope) + '</b>, ' + bandLabel(pick.band==='all'?bandKey:pick.band) + (mixedBed?' (all bed-types)':'') + ' · ' + n + ' registered ' + (deal==='sale'?'sales':'rentals') + ' at the area rate (limited exact comparables).') + '</div>'
+            ? 'Average of the ' + n + ' most recent comparable ' + bl + ' ' + dealw + ' ' + prep + '<b>' + esc(cmp.scopeName) + '</b>, size-adjusted to ' + size.toLocaleString() + ' sq ft (middle 50% shown).'
+            : 'Based on <b>' + esc(cmp.scopeName) + '</b> · ' + n + ' registered ' + dealw + ' at the area rate (limited exact comparables).') + '</div>'
         + (note ? '<div class="note">' + note + '</div>' : '')
         + txTable(cmp, bandKey);
     }
@@ -1585,10 +1613,14 @@ var css = TOKENS
         var unit = r.u ? ('Unit ' + esc(r.u)) : '—';
         return '<tr><td>' + esc(r.nm || scopeName) + '</td><td>' + unit + '</td><td>' + beds + '</td><td class="r">' + (r.z ? r.z.toLocaleString() : '—') + '</td><td class="r">' + price + '</td><td class="r">' + fmtDate(r.d) + '</td></tr>';
       }).join('');
-      var head = 'Recent registered ' + (deal==='sale'?'sales':'rentals') + ' in ' + esc(scopeName);
+      var dealw = deal==='sale'?'sales':'rentals';
+      var head = 'Recent registered ' + dealw + (cmp.source === 'nbhd' ? ' near ' : ' in ') + esc(scopeName);
+      var foot = cmp.source === 'building' ? 'Registered deals in this building'
+        : cmp.source === 'nbhd' ? 'Nearby buildings in the same cluster — the exact building had few registered ' + dealw
+        : 'Nearest community shown — no separately registered ' + dealw + ' in this building';
       return '<div class="txwrap"><div class="txtitle">' + head + '</div>'
         + '<table class="txtbl"><thead><tr><th>Building</th><th>Unit</th><th>Beds</th><th class="r">Sq ft</th><th class="r">' + (deal==='sale'?'Sold for':'Rent/yr') + '</th><th class="r">Date</th></tr></thead><tbody>' + body + '</tbody></table>'
-        + '<div class="txfoot">' + (cmp.specific ? 'Registered deals in this building' : 'Nearest community shown — no separately registered ' + (deal==='sale'?'sales':'rentals') + ' in this building') + ' · Dubai Land Department / Ejari, via Property Finder.</div></div>';
+        + '<div class="txfoot">' + foot + ' · Dubai Land Department / Ejari, via Property Finder.</div></div>';
     }
     $('go').addEventListener('click', run);
   }
